@@ -1,29 +1,18 @@
-import {
-  PersonAddOutlined,
-  PersonRemoveOutlined,
-  ChatBubbleOutlineOutlined,
-  FavoriteBorderOutlined,
-  FavoriteOutlined,
-  ShareOutlined,
-} from "@mui/icons-material";
-import {
-  Box,
-  Typography,
-  InputBase,
-  useTheme,
-  Button,
-  IconButton,
-  useMediaQuery,
-  Divider,
-} from "@mui/material";
+/* eslint-disable react-hooks/exhaustive-deps */
+import { Box } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import PostClick from "../../components/PostClick";
+import PostClick from "../../components/post/PostClick";
 import PostWidget from "./PostWidget";
 import { setPosts } from "../../../state/index";
+import { debounce } from "lodash";
+import _ from "lodash";
 
-const PostsWidget = () => {
+// eslint-disable-next-line react/prop-types
+const PostsWidget = ({ socket, newPosts: newPostsData = {} }) => {
+  const [pageNumber, setPageNumber] = useState(1);
   const [isPostClicked, setIsPostClicked] = useState(false);
+  const [postLoading, setPostLoading] = useState(true);
   const [postClickData, setPostClickData] = useState({
     picturePath: "",
     firstName: "",
@@ -31,6 +20,8 @@ const PostsWidget = () => {
     userPicturePath: "",
     description: "",
     _id: "",
+    userId: "",
+    verified: false,
   });
   const posts = useSelector((state) => state.posts);
   const token = useSelector((state) => state.token);
@@ -38,33 +29,79 @@ const PostsWidget = () => {
 
   document.body.style.overflow = isPostClicked ? "hidden" : "unset";
 
-  async function getPosts() {
-    try {
-      const response = await fetch("http://localhost:3001/posts", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  useEffect(() => {
+    dispatch(setPosts({ posts: [] }));
+  }, []);
 
-      const posts = await response.json();
-      dispatch(setPosts({ posts }));
+  function uiqueIt(data) {
+    return _.uniqBy(data, "_id");
+  }
+
+  async function getPosts(reset = false) {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/posts/feed?page=${pageNumber}&limit=${
+          5 + newPostsData.length
+        }`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const newPosts = await response.json();
+
+      // console.log(
+      //   new Date(newPosts[0]?.createdAt) < new Date(newPosts[1]?.createdAt)
+      // );
+
+      if (reset) {
+        dispatch(setPosts({ posts: uiqueIt(newPosts) }));
+      } else if (newPostsData.length === 0) {
+        dispatch(setPosts({ posts: uiqueIt([...posts, ...newPosts]) }));
+      } else {
+        dispatch(
+          setPosts({ posts: uiqueIt([...posts, ...newPosts, ...newPostsData]) })
+        );
+        // setNewPosts([]);
+      }
     } catch (error) {
       console.log(error);
+    } finally {
+      setPostLoading(false);
     }
   }
 
   useEffect(() => {
-    getPosts();
+    if (pageNumber === 1) {
+      getPosts(true);
+    } else {
+      getPosts();
+    }
+  }, [pageNumber]);
+
+  const getMorePosts = () => {
+    setPageNumber((prevNum) => prevNum + 1);
+  };
+
+  useEffect(() => {
+    const handleScroll = debounce(() => {
+      if (
+        window.scrollY + window.innerHeight >=
+        document.body.offsetHeight - 3
+      ) {
+        getMorePosts();
+      }
+    }, 300);
+
+    window.addEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, []);
 
   return (
     <Box>
-      <PostWidget
-        posts={posts}
-        postClickData={postClickData}
-        setPostClickData={setPostClickData}
-        isPostClicked={isPostClicked}
-        setIsPostClicked={setIsPostClicked}
-      />
       {isPostClicked && (
         <PostClick
           picturePath={postClickData.picturePath}
@@ -74,8 +111,20 @@ const PostsWidget = () => {
           description={postClickData.description}
           setIsPostClicked={setIsPostClicked}
           _id={postClickData._id}
+          userId={postClickData.userId}
+          verified={postClickData.verified}
         />
       )}
+
+      <PostWidget
+        posts={posts}
+        postClickData={postClickData}
+        setPostClickData={setPostClickData}
+        isPostClicked={isPostClicked}
+        setIsPostClicked={setIsPostClicked}
+        postLoading={postLoading}
+        socket={socket}
+      />
     </Box>
   );
 };

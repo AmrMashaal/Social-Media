@@ -7,20 +7,33 @@ import {
   Typography,
   useTheme,
   IconButton,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import EditOutLinedIcon from "@mui/icons-material/EditOutlined";
 import { Formik } from "formik";
 import * as yup from "yup";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setLogin } from "../../../state";
 import Dropzone from "react-dropzone";
 import FlexBetween from "../../components/FlexBetween";
+import { countries, occupations } from "../../../infoArrays";
 
 const registerSchema = yup.object().shape({
-  firstName: yup.string().required("required"),
-  lastName: yup.string().required("required"),
-  email: yup.string().email("invalid email").required("required"),
+  firstName: yup
+    .string()
+    .min(2)
+    .max(20)
+    .matches(/^\p{L}+(\s\p{L}+)*$/u, "You can just add alphabetic characters")
+    .required("required"),
+  lastName: yup
+    .string()
+    .min(2)
+    .max(20)
+    .matches(/^\p{L}+(\s\p{L}+)*$/u, "You can just add alphabetic characters"),
+  username: yup.string().max(20).required("required"),
   password: yup.string().required("required"),
   location: yup.string().required("required"),
   occupation: yup.string().required("required"),
@@ -30,19 +43,20 @@ const registerSchema = yup.object().shape({
     .test(
       "fileType",
       "Unsupported file format",
-      (value) => value && ["image/jpeg", "image/png"].includes(value.type)
+      (value) =>
+        value && ["image/jpeg", "image/png", "image/webp"].includes(value.type)
     ),
 });
 
 const loginSchema = yup.object().shape({
-  email: yup.string().email("invalid email").required("required"),
+  username: yup.string().max(20).required("required"),
   password: yup.string().required("required"),
 });
 
 const initialValuesRegister = {
   firstName: "",
   lastName: "",
-  email: "",
+  username: "",
   password: "",
   location: "",
   occupation: "",
@@ -50,81 +64,124 @@ const initialValuesRegister = {
 };
 
 const initialValuesLogin = {
-  email: "",
+  username: "",
   password: "",
 };
 
 const Form = () => {
-  const [pageType, setPageType] = useState("register");
+  const [dataExisted, setDataExisted] = useState({
+    username: false,
+  });
+  const [loginError, setLoginError] = useState({
+    username: false,
+    password: false,
+  });
+
   const { palette } = useTheme();
+
   const dispatch = useDispatch();
+
   const navigate = useNavigate();
+
   const isNonMobileScreen = useMediaQuery("(min-width: 600px)");
-  const isLogin = pageType === "login";
-  const isRegister = pageType === "register";
+
+  document.title = "Loop";
+
+  const location = useLocation();
 
   const register = async (values, onSubmitProps) => {
-    const formData = new FormData();
+    try {
+      const formData = new FormData();
 
-    for (let value in values) {
-      formData.append(value, values[value]);
-    }
-    formData.append("picturePath", values.picture ? values.picture.name : "");
-
-    const savedUserResponse = await fetch(
-      "http://localhost:3001/auth/register",
-      {
-        method: "POST",
-        body: formData,
+      for (let value in values) {
+        formData.append(value, values[value]);
       }
-    );
+      formData.append("picturePath", values.picture ? values.picture.name : "");
 
-    const savedUser = await savedUserResponse.json();
-    console.log(savedUser);
-    onSubmitProps.resetForm();
+      const savedUserResponse = await fetch(
+        `${import.meta.env.VITE_API_URL}/auth/register`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
-    if (savedUser) {
-      setPageType("login");
+      const savedUser = await savedUserResponse.json();
+
+      setDataExisted({ username: false });
+
+      if (
+        savedUser?.message &&
+        savedUser?.message?.includes("Username Is Already Existed")
+      ) {
+        setDataExisted({ username: true });
+      }
+      if (savedUser && !savedUser?.message) {
+        onSubmitProps.resetForm();
+        navigate("/login");
+      }
+    } catch (error) {
+      console.log(error);
     }
   };
 
   const login = async (values, onSubmitProps) => {
-    const formData = new FormData();
+    try {
+      const formData = new FormData();
 
-    for (let value in values) {
-      formData.append(value, values[value]);
-    }
+      for (let value in values) {
+        formData.append(value, values[value]);
+      }
 
-    const loggedInResponse = await fetch("http://localhost:3001/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
+      const loggedInResponse = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
 
-    const loggedIn = await loggedInResponse.json();
-    onSubmitProps.resetForm();
+      const loggedIn = await loggedInResponse.json();
 
-    if (loggedIn) {
-      dispatch(
-        setLogin({
-          user: loggedIn.user,
-          token: loggedIn.token,
-        })
-      );
-      navigate("/home");
+      if (loggedIn && !loggedIn.message) {
+        dispatch(
+          setLogin({
+            user: loggedIn.user,
+            token: loggedIn.token,
+          })
+        );
+        onSubmitProps.resetForm();
+        navigate("/");
+      }
+
+      setLoginError(false);
+
+      if (loggedIn.message === "Wrong password.") {
+        setLoginError({ username: false, password: true });
+      }
+
+      if (loggedIn.message === "User is not exist.") {
+        setLoginError({ username: true, password: false });
+      }
+    } catch (error) {
+      console.log(error);
     }
   };
 
   const handleFormSubmit = async (values, onSubmitProps) => {
-    if (isLogin) await login(values, onSubmitProps);
-    if (isRegister) await register(values, onSubmitProps);
+    if (location.pathname === "/login") await login(values, onSubmitProps);
+    if (location.pathname === "/signup") await register(values, onSubmitProps);
   };
 
   return (
     <Formik
       onSubmit={handleFormSubmit}
-      initialValues={isLogin ? initialValuesLogin : initialValuesRegister}
-      validationSchema={isLogin ? loginSchema : registerSchema}
+      initialValues={
+        location.pathname === "/login"
+          ? initialValuesLogin
+          : initialValuesRegister
+      }
+      validationSchema={
+        location.pathname === "/login" ? loginSchema : registerSchema
+      }
     >
       {({
         values,
@@ -137,7 +194,7 @@ const Form = () => {
         resetForm,
       }) => (
         <form onSubmit={handleSubmit}>
-          {isRegister ? (
+          {location.pathname === "/signup" ? (
             <Box
               display="grid"
               gridTemplateColumns="repeat(4, minmax(0, 1fr))"
@@ -174,17 +231,24 @@ const Form = () => {
               />
 
               <TextField
-                label="Email"
+                label="Username"
                 onBlur={handleBlur}
                 onChange={handleChange}
-                value={values.email}
-                name="email" // name is related to initialValuesRegister
-                error={Boolean(touched.email) && Boolean(errors.email)}
-                helperText={touched.email && errors.email}
+                value={values.username}
+                name="username" // name is related to initialValuesRegister
+                error={Boolean(touched.username) && Boolean(errors.username)}
+                helperText={touched.username && errors.username}
                 sx={{
                   gridColumn: "span 4",
                 }}
               />
+
+              {dataExisted.username && (
+                <Typography color="error" fontSize="12px" whiteSpace="nowrap">
+                  this username is already existed
+                </Typography>
+              )}
+
               <Box
                 border={`2px solid ${palette.neutral.medium}`}
                 padding="1rem"
@@ -196,7 +260,7 @@ const Form = () => {
                 }}
               >
                 <Dropzone
-                  accept=".jpg,.jpeg,.png"
+                  accept=".jpg,.jpeg,.png,.webp"
                   multiple={false}
                   onDrop={(acceptedFiles) => {
                     setFieldValue("picture", acceptedFiles[0]);
@@ -244,32 +308,74 @@ const Form = () => {
                   gridColumn: "span 4",
                 }}
               />
-              <TextField
-                label="Location"
-                onBlur={handleBlur}
-                onChange={handleChange}
+              <InputLabel id="location-lable">Location</InputLabel>
+              <Select
+                name="location"
+                displayEmpty
                 value={values.location}
-                name="location" // name is related to initialValuesRegister
-                error={Boolean(touched.location) && Boolean(errors.location)}
-                helperText={touched.location && errors.location}
-                sx={{
-                  gridColumn: "span 4",
-                }}
-              />
-              <TextField
-                label="Occupation"
-                onBlur={handleBlur}
                 onChange={handleChange}
-                value={values.occupation}
-                name="occupation" // name is related to initialValuesRegister
-                error={
-                  Boolean(touched.occupation) && Boolean(errors.occupation)
-                }
-                helperText={touched.occupation && errors.occupation}
+                onBlur={handleBlur}
+                error={Boolean(touched.location) && Boolean(errors.location)}
+                labelId="location-lable"
                 sx={{
                   gridColumn: "span 4",
                 }}
-              />
+              >
+                <MenuItem value="">Select a location</MenuItem>
+                {countries.map((country) => {
+                  return (
+                    <MenuItem value={country} key={country}>
+                      {country}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+              {Boolean(touched.location) && Boolean(errors.location) && (
+                <Typography color="error" fontSize="12px" whiteSpace="nowrap">
+                  {errors.location}
+                </Typography>
+              )}
+
+              <Box
+                sx={{
+                  gridColumn: "span 4",
+                }}
+              >
+                <InputLabel id="occupation-lable" sx={{ mb: "10px" }}>
+                  Occupation
+                </InputLabel>
+                <Select
+                  name="occupation"
+                  displayEmpty
+                  value={values.occupation}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={
+                    Boolean(touched.occupation) && Boolean(errors.occupation)
+                  }
+                  labelId="occupation-lable"
+                  sx={{ width: "100%" }}
+                >
+                  <MenuItem value="">Select a occupation</MenuItem>
+                  {occupations.map((occupation) => {
+                    return (
+                      <MenuItem value={occupation} key={occupation}>
+                        {occupation}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+                {Boolean(touched.occupation) && Boolean(errors.occupation) && (
+                  <Typography
+                    color="error"
+                    m="10px 0 0px 0"
+                    fontSize="12px"
+                    whiteSpace="nowrap"
+                  >
+                    {errors.occupation}
+                  </Typography>
+                )}
+              </Box>
             </Box>
           ) : (
             <Box
@@ -278,17 +384,22 @@ const Form = () => {
               gap="10px"
             >
               <TextField
-                label="Email"
+                label="Username"
                 onBlur={handleBlur}
                 onChange={handleChange}
-                value={values.email}
-                name="email" // name is related to initialValuesRegister
-                error={Boolean(touched.email) && Boolean(errors.email)}
-                helperText={touched.email && errors.email}
+                value={values.username}
+                name="username" // name is related to initialValuesRegister
+                error={Boolean(touched.username) && Boolean(errors.username)}
+                helperText={touched.username && errors.username}
                 sx={{
                   gridColumn: "span 4",
                 }}
               />
+              {loginError.username && (
+                <Typography color="error" fontSize="12px" whiteSpace="nowrap">
+                  the username is not existed
+                </Typography>
+              )}
               <TextField
                 label="Password"
                 type="password"
@@ -302,6 +413,11 @@ const Form = () => {
                   gridColumn: "span 4",
                 }}
               />
+              {loginError.password && (
+                <Typography color="error" fontSize="12px" whiteSpace="nowrap">
+                  the password is wrong
+                </Typography>
+              )}
             </Box>
           )}
 
@@ -321,24 +437,27 @@ const Form = () => {
               }}
               onClick={handleFormSubmit}
             >
-              {isRegister ? "REGISTER" : "Login"}
+              {location.pathname === "/signup" ? "REGISTER" : "Login"}
             </Button>
-            <Typography
-              color={palette.primary.main}
-              sx={{
-                textDecoration: "underline",
-                cursor: "pointer",
-                mt: ".6rem",
-              }}
-              onClick={() => {
-                setPageType(isRegister ? "login" : "register");
-                resetForm();
-              }}
-            >
-              {isRegister
-                ? "Already have an account? Login here"
-                : "Don't have an account? Sing Up here"}
-            </Typography>
+
+            <Link to={location.pathname === "/signup" ? "/login" : "/signup"}>
+              <Typography
+                color={palette.primary.main}
+                sx={{
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                  mt: ".6rem",
+                  width: "fit-content",
+                }}
+                onClick={() => {
+                  resetForm();
+                }}
+              >
+                {location.pathname === "/signup"
+                  ? "Already have an account? Login here"
+                  : "Don't have an account? Sign Up here"}
+              </Typography>
+            </Link>
           </Box>
         </form>
       )}

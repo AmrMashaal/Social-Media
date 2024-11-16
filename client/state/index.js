@@ -29,6 +29,9 @@ export const authSlice = createSlice({
         console.error("User friends non-existent :(");
       }
     },
+    setFriendsRequest: (state, action) => {
+      state.user.friendsRequest = action.payload.friendsRequestState;
+    },
     setPosts: (state, action) => {
       state.posts = action.payload.posts;
     },
@@ -41,7 +44,7 @@ export const authSlice = createSlice({
     },
     setDeletePost: (state, action) => {
       const updatePosts = state.posts.filter((post) => {
-        return post._id !== action.payload.postId
+        return post._id !== action.payload.postId;
       });
 
       state.posts = updatePosts;
@@ -54,6 +57,7 @@ export const {
   setLogin,
   setLogout,
   setFriends,
+  setFriendsRequest,
   setPosts,
   setPost,
   setDeletePost,
