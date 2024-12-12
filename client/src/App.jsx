@@ -9,22 +9,24 @@ import { createTheme } from "@mui/material/styles";
 import { themeSettings } from "./theme";
 import SearchPage from "./scenes/searchPage/SearchPage";
 import { setFriends } from "../state";
-import io from "socket.io-client";
 import ChatPage from "./scenes/chatPage/ChatPage";
-
-const socket = io.connect(import.meta.env.VITE_API_URL); // the backend server
+import socket from "./components/socket";
+import PostClick from "./components/post/PostClick";
+import _ from "lodash";
 
 const App = () => {
   const [newPosts, setNewPosts] = useState([]);
+  const [onlineFriends, setOnlineFriends] = useState([]);
 
-  const mode = useSelector((state) => state.mode);
-  const theme = useMemo(() => createTheme(themeSettings(mode)), [mode]);
   const isAuth = Boolean(useSelector((state) => state.user));
 
+  const mode = useSelector((state) => state.mode);
   const user = useSelector((state) => state.user);
   const token = useSelector((state) => state.token);
+  const theme = useMemo(() => createTheme(themeSettings(mode)), [mode]);
 
   const dispatch = useDispatch();
+
   const handleUserFriend = async () => {
     try {
       const response = await fetch(
@@ -51,11 +53,25 @@ const App = () => {
       setNewPosts((prevPosts) => (prevPosts ? [...prevPosts, data] : data));
     });
 
-    socket.emit("userOnline", user?._id);
+    socket.on("friendsOnline", (id) => {
+      setOnlineFriends((prev) =>
+        _.uniqBy(
+          // _.uniqBy helps me to remove any repeated elements
+          [
+            ...prev,
+            ...[user?.friends?.filter((friend) => friend._id === id)[0]],
+          ],
+          "_id"
+        )
+      );
+    });
+
+    socket.emit("userOnline", { userId: user?._id, friends: user?.friends });
 
     return () => {
       socket.off("notification");
-      socket.off("userOnline"); // last code
+      socket.off("userOnline");
+      socket.off("friendsOnline");
     };
   }, [socket]);
 
@@ -69,10 +85,12 @@ const App = () => {
               path="/login"
               element={!isAuth ? <LoginPage /> : <Navigate to="/" />}
             />
-             <Route
+            {/* -------------------------------------------------------- */}
+            <Route
               path="/signup"
               element={!isAuth ? <LoginPage /> : <Navigate to="/" />}
             />
+            {/* -------------------------------------------------------- */}
             <Route
               path="/"
               element={
@@ -81,26 +99,32 @@ const App = () => {
                     socket={socket}
                     newPosts={newPosts}
                     setNewPosts={setNewPosts}
+                    onlineFriends={onlineFriends}
+                    setOnlineFriends={setOnlineFriends}
                   />
                 ) : (
                   <Navigate to="/login" />
                 )
               }
             />
+            {/* -------------------------------------------------------- */}
             <Route
               path="/profile/:userId"
               element={isAuth ? <ProfilePage /> : <Navigate to="/login" />}
             />
+            {/* -------------------------------------------------------- */}
             <Route
               path="/search/:searchValue"
               element={isAuth ? <SearchPage /> : <Navigate to="/login" />}
             />
+            {/* -------------------------------------------------------- */}
             <Route
               path="/chat/:userId"
               element={
                 isAuth ? <ChatPage socket={socket} /> : <Navigate to="/login" />
               }
             />
+            {/* -------------------------------------------------------- */}
             <Route
               path="/chat"
               element={
@@ -111,9 +135,15 @@ const App = () => {
                 )
               }
             />
+            {/* -------------------------------------------------------- */}
             <Route
               path="*"
               element={isAuth ? <Navigate to="/" /> : <Navigate to="/login" />}
+            />
+            {/* -------------------------------------------------------- */}
+            <Route
+              path="/post/:id"
+              element={isAuth ? <PostClick /> : <Navigate to="/login" />}
             />
           </Routes>
         </ThemeProvider>

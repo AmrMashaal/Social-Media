@@ -3,6 +3,9 @@ import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import Post from "../models/Post.js";
 import User from "../models/User.js";
+import Comment from "../models/Comment.js";
+import Like from "../models/Like.js";
+import Notification from "../models/notification.js";
 
 const compressImage = async (buffer) => {
   return await sharp(buffer)
@@ -48,7 +51,7 @@ export const createPost = async (req, res) => {
       location: user.location,
       verified: user.verified,
       comments: [],
-      likes: {},
+      likes: [],
     });
 
     await newPost.save();
@@ -68,7 +71,18 @@ export const getFeedPosts = async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit);
 
-    res.status(200).json(posts);
+    const postsWithIsLiked = await Promise.all(
+      posts.map(async (post) => {
+        const isLiked = await Like.findOne({
+          userId: req.user.id,
+          postId: post._id,
+        });
+
+        return { ...post._doc, isLiked: Boolean(isLiked) };
+      })
+    );
+
+    res.status(200).json(postsWithIsLiked);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -82,9 +96,20 @@ export const getUserPosts = async (req, res) => {
     const userPosts = await Post.find({ userId })
       .skip((page - 1) * limit)
       .limit(limit)
-      .sort({ createdAt: -1 });
+      .sort({ pinned: -1, createdAt: -1 });
 
-    res.status(200).json(userPosts);
+    const postsWithIsLiked = await Promise.all(
+      userPosts.map(async (post) => {
+        const isLiked = await Like.findOne({
+          userId: req.user.id,
+          postId: post._id,
+        });
+
+        return { ...post._doc, isLiked: Boolean(isLiked) };
+      })
+    );
+
+    res.status(200).json(postsWithIsLiked);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -99,36 +124,14 @@ export const getPost = async (req, res) => {
       return res.status(404).json({ message: "Post is not found" });
     }
 
-    res.status(200).json(post);
-  } catch (error) {
-    res.status(404).json({ message: err.message });
-  }
-};
+    const isLiked = await Like.findOne({
+      userId: req.user.id,
+      postId: post._id,
+    });
 
-export const likePost = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.body;
-    const post = await Post.findById(id);
-    const isLiked = post.likes.get(userId);
-    if (isLiked) {
-      post.likes.delete(userId);
-    } else {
-      post.likes.set(userId, true);
-    }
+    const postWithIsLiked = { ...post._doc, isLiked: Boolean(isLiked) };
 
-    if (!post) {
-      return res.status(404).json({ message: "Post is not found" });
-    }
-
-    const uodatedPost = await Post.findByIdAndUpdate(
-      id,
-      {
-        likes: post.likes,
-      },
-      { new: true } // we used it to show us the updated post because without it. it will show us the old post even after updating it
-    );
-    res.status(200).json(uodatedPost);
+    res.status(200).json(postWithIsLiked);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -137,17 +140,20 @@ export const likePost = async (req, res) => {
 export const deletePost = async (req, res) => {
   try {
     const { id } = req.params;
+
+    await Notification.deleteMany({ linkId: id });
+
+    await Comment.deleteMany({ postId: id });
+
     const deletedPost = await Post.findByIdAndDelete(id);
 
     if (!deletedPost) {
       return res.status(404).json({ message: "Post is not found" });
     }
 
-    await Comment.deleteMany({ postId: id });
-
     res.status(200).json(deletedPost);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
@@ -165,39 +171,46 @@ export const editPost = async (req, res) => {
 
     const result = await post.save();
 
-    res.status(200).json(result);
+    const isLiked = await Like.findOne({
+      userId: req.user.id,
+      postId: post._id,
+    });
+
+    const postWithIsLiked = { ...result._doc, isLiked: Boolean(isLiked) };
+
+    res.status(200).json(postWithIsLiked);
   } catch (error) {
     res.status(500).json({ message: err.message });
   }
 };
 
-export const postComment = async (req, res) => {
-  const { postId, userId } = req.params;
-  const post = await Post.findById(postId);
-
-  if (!post) {
-    return res.status(404).send({ message: "Post is not found" });
-  }
+export const pinPost = async (req, res) => {
+  const { postId } = req.params;
 
   try {
-    post.comments.push({
-      _id: req.body._id,
-      text: req.body.text,
-      img: req.body.img || null,
-      userId: userId,
-      userImage: req.body.userImage,
-      userFirstName: req.body.userFirstName,
-      userLastName: req.body.userLastName,
-      verified: req.body.verified,
-      likes: [],
-      replays: [],
-      createdAt: req.body.createdAt,
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ message: "Post is not found" });
+    }
+
+    if (post.pinned) {
+      post.pinned = false;
+    } else {
+      post.pinned = true;
+    }
+
+    await post.save();
+
+    const isLiked = await Like.findOne({
+      userId: req.user.id,
+      postId: post._id,
     });
 
-    const result = await post.save();
+    const postWithIsLiked = { ...post._doc, isLiked: Boolean(isLiked) };
 
-    res.json(result);
-  } catch (error) {
+    res.status(200).json(postWithIsLiked);
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };

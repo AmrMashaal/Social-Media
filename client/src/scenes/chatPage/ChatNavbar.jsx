@@ -7,8 +7,11 @@ import {
   Person2,
   Menu,
   ChatSharp,
+  Notifications,
+  Home,
 } from "@mui/icons-material";
 import {
+  Button,
   FormControl,
   IconButton,
   InputBase,
@@ -16,13 +19,15 @@ import {
   Select,
   Typography,
 } from "@mui/material";
-import { Box } from "@mui/system";
+import { Box, useMediaQuery } from "@mui/system";
 import { setFriendsRequest, setLogout, setMode } from "../../../state";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { useTheme } from "@emotion/react";
 import { useEffect, useState } from "react";
 import FriendsRequest from "../widgets/FriendsRequest";
+import socket from "../../components/socket";
+import NotificationData from "../widgets/NotificationData";
 
 const ChatNavbar = ({
   setOpenChats,
@@ -33,6 +38,13 @@ const ChatNavbar = ({
 }) => {
   const [openRequests, setOpenRequests] = useState(false);
   const [friendsRequestData, setFriendRequestData] = useState([]);
+  const [isNotification, setIsNotification] = useState(false);
+  const [notificationsState, setNotificationsState] = useState(null);
+  const [watchedNotifications, setWatchedNotifications] = useState(null);
+  const [isDeleteNotifications, setIsDeleteNotifications] = useState(false);
+  const [pageNumber, setPageNumber] = useState(1);
+
+  const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
 
   const user = useSelector((state) => state.user);
   const mode = useSelector((state) => state.mode);
@@ -64,9 +76,106 @@ const ChatNavbar = ({
     }
   };
 
+  const getNotifications = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/notifications/${
+          user._id
+        }?page=${pageNumber}&limit=10`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+      setNotificationsState(data);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   useEffect(() => {
     friendsRequest();
+    getNotifications();
   }, []);
+
+  useEffect(() => {
+    socket.on("getNotifications", (data) => {
+      setNotificationsState((prev) =>
+        notificationsState?.length === 0 ? data : [data, ...(prev || [])]
+      );
+    });
+
+    socket.on("friendNewPost", (data) => {
+      console.log(data);
+      setNotificationsState((prev) =>
+        notificationsState?.length === 0 ? data : [data, ...(prev || [])]
+      );
+    });
+
+    return () => {
+      socket.off("getNotifications");
+      socket.off("friendNewPost");
+    };
+  }, [socket]);
+
+  const handleWatchNotification = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/notifications/${user._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        setWatchedNotifications(null);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleDeleteNotifications = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/notifications/${user._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        setNotificationsState(null);
+        setWatchedNotifications(null);
+        setIsDeleteNotifications(false);
+        setIsNotification(false);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  useEffect(() => {
+    setWatchedNotifications(
+      notificationsState?.length > 0
+        ? notificationsState?.filter((ele) => ele.watched === false)
+        : null
+    );
+
+    return () => {
+      setWatchedNotifications(null);
+    };
+  }, [notificationsState]);
 
   return (
     <Box position="relative" zIndex="1">
@@ -150,6 +259,20 @@ const ChatNavbar = ({
           gap="20px"
           marginTop="14px"
         >
+          <Link to="/" onClick={() => setIsMobileMenuToggled(false)}>
+            <Box
+              display="flex"
+              alignItems="center"
+              sx={{ cursor: "pointer", userSelect: "none" }}
+            >
+              <IconButton sx={{ position: "relative" }}>
+                <Home sx={{ fontSize: "25px" }} />
+              </IconButton>
+
+              <Typography>Home Page</Typography>
+            </Box>
+          </Link>
+
           <Link
             to={`/profile/${user._id}`}
             onClick={() => setIsMobileMenuToggled(false)}
@@ -176,7 +299,7 @@ const ChatNavbar = ({
             <IconButton sx={{ position: "relative" }}>
               <People sx={{ fontSize: "25px" }} />
 
-              {user.friendsRequest.length > 0 && (
+              {user?.friendsRequest?.length > 0 && (
                 <Typography
                   position="absolute"
                   right="0px"
@@ -187,13 +310,72 @@ const ChatNavbar = ({
                   fontSize="11px"
                   color="white"
                 >
-                  {user.friendsRequest.length < 100
-                    ? user.friendsRequest.length
+                  {user?.friendsRequest?.length < 100
+                    ? user?.friendsRequest?.length
                     : "+99"}
                 </Typography>
               )}
             </IconButton>
             <Typography>Friends Request</Typography>
+          </Box>
+
+          <Box
+            display="flex"
+            alignItems="center"
+            sx={{ cursor: "pointer", userSelect: "none" }}
+            onClick={() => {
+              setIsNotification(true),
+                handleWatchNotification(),
+                setIsDeleteNotifications(false);
+              if (
+                notificationsState !== null &&
+                notificationsState?.length !== 0
+              ) {
+                setNotificationsState(
+                  notificationsState?.map((ele) => {
+                    return { ...ele, watched: true };
+                  })
+                );
+              }
+            }}
+          >
+            <IconButton
+              sx={{
+                position: "relative",
+              }}
+            >
+              <Notifications sx={{ fontSize: "25px" }} />
+              <Typography
+                position="absolute"
+                top="-2px"
+                right="0"
+                p="3px"
+                sx={{
+                  width: "17px",
+                  borderRadius: "50%",
+                  bgcolor:
+                    watchedNotifications?.length !== 0 &&
+                    watchedNotifications !== null
+                      ? "red"
+                      : undefined,
+                  height: "17px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "12px",
+                  padding: "10px",
+                  color: "white",
+                }}
+              >
+                {watchedNotifications?.length > 99
+                  ? "+99"
+                  : watchedNotifications?.length !== 0
+                  ? watchedNotifications?.length
+                  : undefined}
+              </Typography>
+            </IconButton>
+
+            <Typography>Notifications</Typography>
           </Box>
 
           <FormControl variant="standard" value={fullName}>
@@ -290,6 +472,7 @@ const ChatNavbar = ({
           </Box>
         </Box>
       </Box>
+
       {openRequests && (
         <FriendsRequest
           openRequests={openRequests}
@@ -298,6 +481,92 @@ const ChatNavbar = ({
           friendsRequestData={friendsRequestData}
           setFriendRequestData={setFriendRequestData}
         />
+      )}
+
+      {isNotification && !isDeleteNotifications && (
+        <NotificationData
+          openNotification={isNotification}
+          setIsMobileMenuToggled={setIsMobileMenuToggled}
+          setIsNotification={setIsNotification}
+          notificationsState={notificationsState}
+          isDeleteNotifications={isDeleteNotifications}
+          setIsDeleteNotifications={setIsDeleteNotifications}
+        />
+      )}
+
+      {isDeleteNotifications && (
+        <Box
+          position="fixed"
+          width="100%"
+          height="100%"
+          top="0"
+          left="0"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          zIndex="111111"
+        >
+          <Box
+            position="absolute"
+            width="100%"
+            height="100%"
+            bgcolor="#00000066"
+            onClick={() => setIsDeleteNotifications(false)}
+          ></Box>
+
+          <Box
+            bgcolor={theme.palette.neutral.light}
+            p="10px 28px"
+            width={isNonMobileScreens ? "500px" : "100%"}
+            display="flex"
+            flexDirection="column"
+            justifyContent="center"
+            position="relative"
+            height="100px"
+            sx={{
+              maxWidth: "100%",
+              zIndex: "1",
+              overflow: "auto",
+              borderRadius: isNonMobileScreens ? "0.75rem" : "0",
+            }}
+          >
+            <Box
+              display="flex"
+              gap="20px"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Button
+                sx={{
+                  bgcolor: "#9e1125b3",
+                  color: "white",
+                  width: "130px",
+                  ":hover": {
+                    bgcolor: "#760e1d47",
+                  },
+                }}
+                onClick={() => {
+                  setIsDeleteNotifications(false), handleDeleteNotifications();
+                }}
+              >
+                Remove
+              </Button>
+              <Button
+                sx={{
+                  bgcolor: "#57575780",
+                  color: "white",
+                  width: "130px",
+                  ":hover": {
+                    bgcolor: "#44444480",
+                  },
+                }}
+                onClick={() => setIsDeleteNotifications(false)}
+              >
+                Close
+              </Button>
+            </Box>
+          </Box>
+        </Box>
       )}
     </Box>
   );

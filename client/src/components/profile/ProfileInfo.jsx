@@ -82,15 +82,20 @@ const ProfileInfo = ({ userInfo, userId }) => {
   };
 
   const addremoveFriend = async () => {
-    if (user.friends.some((friend) => friend._id === userId)) {
+    const frineds = user?.friends || [];
+    const friendsRequest = user?.friendsRequest || [];
+
+    if (frineds?.some((friend) => friend?._id === userId)) {
       setFriendSettings("my friend");
     } else if (
-      !user.friends.some((friend) => friend._id === userId) &&
-      !user.friendsRequest.includes(userInfo._id)
+      !frineds?.some((friend) => friend?._id === userId) &&
+      !friendsRequest?.includes(userInfo?._id)
     ) {
       setFriendSettings("add");
-    } else if (user.friendsRequest.includes(userInfo._id)) {
+    } else if (friendsRequest?.includes(userInfo._id)) {
       setFriendSettings("accept friend");
+    } else {
+      setFriendSettings("");
     }
   };
 
@@ -242,6 +247,7 @@ const ProfileInfo = ({ userInfo, userId }) => {
                 }
                 size="200px"
                 isProfile={true}
+                isOnline={userInfo?.online}
               />
             </Box>
           ) : (
@@ -276,6 +282,7 @@ const ProfileInfo = ({ userInfo, userId }) => {
                     fontWeight="500"
                     maxWidth={isNonMobileScreens ? undefined : "250px"}
                     className={userInfo?.verified && "loopAnimation"}
+                    lineHeight={isNonMobileScreens ? "50px" : "30px"}
                   >
                     {userInfo?._id === user._id
                       ? user.firstName
@@ -297,10 +304,11 @@ const ProfileInfo = ({ userInfo, userId }) => {
                     />
                   )}
                 </Box>
+
                 <Typography
                   color={mode === "light" ? "#5c5c5c" : "#c1c1c1"}
                   fontSize="17px"
-                  mt="-5px"
+                  m="5px 0 -6px"
                 >
                   <span style={{ userSelect: "none" }}>@</span>
                   {userInfo?._id === user._id

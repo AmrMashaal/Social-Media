@@ -1,13 +1,29 @@
+/* eslint-disable react/prop-types */
 import { useTheme } from "@emotion/react";
 import { Box } from "@mui/material";
+import { useSelector } from "react-redux";
+import { useParams } from "react-router-dom";
 
-// eslint-disable-next-line react/prop-types
-const UserImage = ({ image, size = "60px", isProfile, isSearch }) => {
+const UserImage = ({
+  image,
+  size = "60px",
+  isProfile,
+  isSearch,
+  isOnline = false,
+}) => {
   const theme = useTheme();
   const alt = theme.palette.background.alt;
 
+  const user = useSelector((state) => state.user);
+  const { userId } = useParams();
+
   return (
-    <Box width={size} height={size} margin={isSearch ? "auto" : undefined}>
+    <Box
+      width={size}
+      height={size}
+      margin={isSearch ? "auto" : undefined}
+      position="relative"
+    >
       <img
         style={{
           backgroundColor: "gray",
@@ -21,9 +37,25 @@ const UserImage = ({ image, size = "60px", isProfile, isSearch }) => {
         }}
         width={size}
         height={size}
-        src={`${import.meta.env.VITE_API_URL}/assets/${image}`}
+        src={
+          image
+            ? `${import.meta.env.VITE_API_URL}/assets/${image}`
+            : "/assets/loading-user.png"
+        }
         alt="user img"
       />
+
+      {isOnline && user?._id !== userId && (
+        <Box
+          bgcolor="#00D5FA"
+          width={isProfile ? "15px" : "10px"}
+          height={isProfile ? "15px" : "10px"}
+          borderRadius="50%"
+          position="absolute"
+          bottom="0"
+          right={isProfile ? "5px" : "3px"}
+        ></Box>
+      )}
     </Box>
   );
 };

@@ -187,8 +187,8 @@ export const editUser = async (req, res) => {
         await sharp(compressedBuffer).toFile(filePath);
         req.file.path = filePath; // Update file path for potential future use
         picturePath = uniqueImageName;
-      } catch (error) {
-        res.status(500).json({ message: error });
+      } catch (err) {
+        res.status(500).json({ message: err.message });
       }
     } else if (req.body.background && !req.body.picturePath) {
       try {
@@ -204,8 +204,8 @@ export const editUser = async (req, res) => {
         await sharp(compressedBuffer).toFile(filePath);
         req.file.path = filePath; // Update file path for potential future use
         background = uniqueImageName;
-      } catch (error) {
-        res.status(500).json({ message: error });
+      } catch (err) {
+        res.status(500).json({ message: err.message });
       }
     }
   }
@@ -417,5 +417,56 @@ export const checkCorrectPassword = async (req, res) => {
     res.status(200).json({ message: "Correct password" });
   } catch (err) {
     res.status(404).json({ message: err.message });
+  }
+};
+
+// ---------------------------------------------------------------
+
+export const getOnlineFriends = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await User.findById(id);
+
+    const onlineFriendsData = await User.find({
+      _id: { $in: user.friends },
+      online: true,
+    }); // $in used to find multiple users in an array
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json(onlineFriendsData);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ---------------------------------------------------------------
+
+export const changeOnlineStatus = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (req.body.makeOnline) {
+      user.online = true;
+    } else {
+      user.online = false;
+    }
+
+    const updatedUser = await user.save();
+
+    res
+      .status(200)
+      .json({ message: `User is ${user.online ? "online" : "offline"}` });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

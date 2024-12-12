@@ -1,12 +1,19 @@
 /* eslint-disable react/prop-types */
 import { Divider, IconButton, Typography } from "@mui/material";
-import FlexBetween from "../../components/FlexBetween";
-import { VerifiedOutlined, MoreHoriz, FormatQuote } from "@mui/icons-material";
+import {
+  VerifiedOutlined,
+  MoreHoriz,
+  FormatQuote,
+  PushPinOutlined,
+} from "@mui/icons-material";
 import { Box, useMediaQuery, useTheme } from "@mui/system";
+import { useLocation } from "react-router-dom";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import FlexBetween from "../../components/FlexBetween";
 import WidgetWrapper from "../../components/WidgetWrapper";
 import UserImage from "../../components/UserImage";
-import { useDispatch, useSelector } from "react-redux";
 import { setPost, setDeletePost } from "../../../state";
 import DeleteComponent from "../../components/post/DeleteComponent";
 import UserDot from "../../components/post/UserDot";
@@ -14,8 +21,8 @@ import LikePost from "../../components/post/LikePost";
 import WhoLiked from "../../components/post/WhoLiked";
 import PostImg from "../../components/post/PostImg";
 import PostEdited from "../../components/post/PostEdited";
-import { Link } from "react-router-dom";
 import PostSkeleton from "../skeleton/PostSkeleton";
+import socket from "../../components/socket";
 
 const PostWidget = ({
   posts,
@@ -26,13 +33,17 @@ const PostWidget = ({
   // socket,
 }) => {
   const [showLikes, setShowLikes] = useState(false);
-  const [likeList, setLikeList] = useState([]);
   const [likesLoding, setLikesLoding] = useState(false);
   const [postWhoDeleted, setPostWhoDeleted] = useState(null);
   const [isDelete, setIsDelete] = useState(false);
   const [isDots, setIsDots] = useState(false);
-  const [postInfo, setPostInfo] = useState({ postId: null, userId: null });
   const [isEdit, setIsEdit] = useState(false);
+  const [clickLikeLoading, setClickLikeLoading] = useState({
+    postId: null,
+    loading: false,
+  });
+  const [postInfo, setPostInfo] = useState({ postId: null, userId: null });
+  const [likeList, setLikeList] = useState([]);
 
   const { palette } = useTheme();
   const medium = palette.neutral.medium;
@@ -42,6 +53,9 @@ const PostWidget = ({
   const user = useSelector((state) => state.user);
 
   const dispatch = useDispatch();
+
+  const location = useLocation();
+
   const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
 
   document.body.style.overflow =
@@ -57,7 +71,7 @@ const PostWidget = ({
   // };
 
   const howIsText = (text, img) => {
-    if (!img && text.length < 30) return "24px";
+    if (!img && text?.length < 30) return "24px";
     else return "15px";
   };
 
@@ -256,7 +270,7 @@ const PostWidget = ({
     setLikesLoding(true);
     try {
       const usersWhoLiked = await Promise.all(
-        Object.keys(likes).map(async (userId) => {
+        likes.map(async (userId) => {
           const response = await fetch(
             `${import.meta.env.VITE_API_URL}/users/${userId}`,
             {
@@ -280,26 +294,58 @@ const PostWidget = ({
 
   const handleLike = async (ele) => {
     const postId = ele._id;
+
+    setClickLikeLoading({ postId, loading: true });
+
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/posts/${postId}/like`,
+      const response1 = await fetch(
+        `${import.meta.env.VITE_API_URL}/likes/${postId}/${user._id}/like`,
         {
           method: "PATCH",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ userId: user._id }),
         }
       );
 
-      const updatedPost = await response.json();
+      const updatedPost = await response1.json();
 
-      if (!updatedPost.message) {
-        dispatch(setPost({ post_id: postId, post: updatedPost }));
+      if (response1.ok) {
+        dispatch(setPost({ post_id: postId, post: updatedPost.post }));
+      }
+
+      if (ele.userId !== user._id && updatedPost.isLiked) {
+        const response2 = await fetch(
+          `${import.meta.env.VITE_API_URL}/notifications/${user._id}/${
+            ele.userId
+          }`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              type: "like",
+              description: `${user.firstName} liked your post`,
+              linkId: postId,
+              receiverId: ele.userId,
+              senderId: user._id,
+            }),
+          }
+        );
+
+        const notification = await response2.json();
+
+        socket.emit("notifications", {
+          receiverId: ele.userId,
+          notification: notification,
+        });
       }
     } catch (error) {
       console.log(error);
+    } finally {
+      setClickLikeLoading({ postId: null, loading: false });
     }
   };
 
@@ -399,14 +445,33 @@ const PostWidget = ({
                             <VerifiedOutlined sx={{ color: "#15a1ed" }} />
                           )}
                         </Box>
-                        <Typography fontSize="11px" color={medium}>
-                          {timeAgo(ele?.createdAt)}
+                        <Typography
+                          fontSize="11px"
+                          color={medium}
+                          display="flex"
+                          gap="3px"
+                          sx={{ userSelect: "none" }}
+                        >
+                          {timeAgo(ele?.createdAt)}{" "}
+                          {ele?.edited && (
+                            <Typography fontWeight="500" fontSize="11px">
+                              | Edited
+                            </Typography>
+                          )}
+                          {ele?.pinned &&
+                            location.pathname.split("/")[1] === "profile" && (
+                              <Box
+                                display="flex"
+                                alignItems="center"
+                                gap="2px"
+                                fontWeight="500"
+                                fontSize="11px"
+                              >
+                                | Pinned
+                                <PushPinOutlined sx={{ fontSize: "14px" }} />
+                              </Box>
+                            )}
                         </Typography>
-                        {ele?.edited && (
-                          <Typography fontSize="11px" color={medium}>
-                            Edited
-                          </Typography>
-                        )}
                       </Box>
                     </FlexBetween>
                   </Link>
@@ -447,6 +512,7 @@ const PostWidget = ({
                   whoLikes={whoLikes}
                   setIsPostClicked={setIsPostClicked}
                   setPostClickData={setPostClickData}
+                  loading={clickLikeLoading}
                 />
               </WidgetWrapper>
             );

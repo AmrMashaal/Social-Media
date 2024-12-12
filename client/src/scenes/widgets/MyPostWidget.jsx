@@ -30,9 +30,12 @@ const MyPostWidget = ({ picturePath, socket }) => {
   const [imageError, setImageError] = useState(null);
   const [post, setPost] = useState("");
   const [isError, setIsError] = useState(false);
+
   const { _id } = useSelector((state) => state.user);
   const token = useSelector((state) => state.token);
   const posts = useSelector((state) => state.posts);
+  const user = useSelector((state) => state.user);
+
   const { palette } = useTheme();
 
   const handlePost = async (e) => {
@@ -64,8 +67,21 @@ const MyPostWidget = ({ picturePath, socket }) => {
         setPost("");
         setImage(null);
         setIsImage(false);
+
         dispatch(setPosts({ posts: [post, ...posts] }));
+
         socket.emit("newPost", post);
+
+        socket.emit("notifications", {
+          notification: {
+            type: "newPost",
+          },
+          friends: user.friends,
+          _id: user._id,
+          token: token,
+          firstName: user.firstName,
+          postId: post._id,
+        });
       } catch (err) {
         console.log(`Error: ${err}`);
       }

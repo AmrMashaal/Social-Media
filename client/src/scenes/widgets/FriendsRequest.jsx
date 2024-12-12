@@ -28,7 +28,7 @@ const FriendsRequest = ({
     setRequestLoading(true);
     try {
       const requests = await Promise.all(
-        friendsRequestData.map(async (userId) => {
+        friendsRequestData?.map(async (userId) => {
           const response = await fetch(
             `${import.meta.env.VITE_API_URL}/users/${userId}`,
             {
@@ -38,7 +38,11 @@ const FriendsRequest = ({
           );
 
           const user = await response.json();
-          return user;
+          if (!user.message) {
+            return user;
+          } else {
+            return;
+          }
         })
       );
 
@@ -83,7 +87,7 @@ const FriendsRequest = ({
   const acceptFriend = async (friendId) => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/users/${user._id}/${friendId}/accept`,
+        `${import.meta.env.VITE_API_URL}/users/${user?._id}/${friendId}/accept`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}` },
@@ -92,7 +96,7 @@ const FriendsRequest = ({
 
       setRequestList(
         requestList.filter((request) => {
-          return request._id !== friendId;
+          return request?._id !== friendId;
         })
       );
 
@@ -108,7 +112,7 @@ const FriendsRequest = ({
   const refuseFriend = async (friendId) => {
     try {
       await fetch(
-        `${import.meta.env.VITE_API_URL}/users/${user._id}/${friendId}/refuse`,
+        `${import.meta.env.VITE_API_URL}/users/${user?._id}/${friendId}/refuse`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}` },
@@ -117,7 +121,7 @@ const FriendsRequest = ({
 
       setRequestList(
         requestList.filter((request) => {
-          return request._id !== friendId;
+          return request?._id !== friendId;
         })
       );
 
@@ -133,32 +137,13 @@ const FriendsRequest = ({
       setOpen={setOpenRequests}
       description="Friend Request"
     >
-      {requestLoading ? (
-        <Box
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          width="100%"
-          height="100%"
-          position="absolute"
-          top="50%"
-          left="50%"
-          sx={{ transform: "translate(-50%,-50%)" }}
-        >
-          <img
-            src={"../../../assets/kOnzy.gif"}
-            alt=""
-            width="87"
-            style={{
-              userSelect: "none",
-              filter: "sepia(1) hue-rotate(127deg)",
-            }}
-          />
-        </Box>
-      ) : (
-        requestList.map((request) => {
+      {requestList.length !== 0 &&
+        requestList?.map((request) => {
+          if (request?._id === undefined) {
+            return;
+          }
           return (
-            <Box key={request._id} my="4px">
+            <Box key={request?._id} my="4px">
               <FlexBetween
                 borderRadius="4px"
                 p="5px"
@@ -173,14 +158,14 @@ const FriendsRequest = ({
                 }}
               >
                 <Link
-                  to={`/profile/${request._id}`}
+                  to={`/profile/${request?._id}`}
                   onClick={() => {
                     setOpenRequests(false);
                     setIsMobileMenuToggled(false);
                   }}
                 >
                   <Box display="flex" alignItems="center" gap="10px">
-                    <UserImage image={request.picturePath} />
+                    <UserImage image={request?.picturePath} />
                     <Box display="flex" alignItems="center" gap="4px">
                       <Typography
                         maxWidth="95px"
@@ -188,9 +173,9 @@ const FriendsRequest = ({
                         overflow="hidden"
                         textOverflow="ellipsis"
                       >
-                        {request.firstName || "Undefined"} {request.lastName}
+                        {request?.firstName || "Undefined"} {request?.lastName}
                       </Typography>
-                      {request.verified && (
+                      {request?.verified && (
                         <VerifiedOutlined
                           sx={{
                             fontSize: "20px",
@@ -210,7 +195,7 @@ const FriendsRequest = ({
                         bgcolor: "#44444480",
                       },
                     }}
-                    onClick={() => acceptFriend(request._id)}
+                    onClick={() => acceptFriend(request?._id)}
                   >
                     accept
                   </Button>
@@ -222,7 +207,7 @@ const FriendsRequest = ({
                         bgcolor: "#760e1d47",
                       },
                     }}
-                    onClick={() => refuseFriend(request._id)}
+                    onClick={() => refuseFriend(request?._id)}
                   >
                     refuse
                   </Button>
@@ -230,8 +215,7 @@ const FriendsRequest = ({
               </FlexBetween>
             </Box>
           );
-        })
-      )}
+        })}
       {requestList.length === 0 && !requestLoading && (
         <Box
           display="flex"

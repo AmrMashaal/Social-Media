@@ -260,10 +260,6 @@ const ChatPage = ({ socket, fromNav }) => {
           },
         };
       });
-
-      console.log(
-        Object.keys(chatHistoryData).some((key) => key === data.senderId)
-      );
     };
 
     socket.on("receiveMessage", handleReceiveMessage);
@@ -326,6 +322,36 @@ const ChatPage = ({ socket, fromNav }) => {
   useEffect(() => {
     checkCorrectPassword();
   }, []);
+
+  const handleFormSubmit = async (e) => {
+    handleSubmit(e);
+    modifyChatHistory(userId);
+
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/notifications/${user._id}/${userId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          type: "message",
+          description: `${user.firstName} sent you a message`,
+          linkId: user._id,
+          receiverId: userId,
+          senderId: user._id,
+        }),
+      }
+    );
+
+    const notification = await response.json();
+
+    socket.emit("notifications", {
+      receiverId: userId,
+      notification: notification,
+    });
+  };
 
   return (
     <Box
@@ -451,9 +477,7 @@ const ChatPage = ({ socket, fromNav }) => {
               justifyContent: "center",
               padding: "0 8px 0",
             }}
-            onSubmit={(e) => {
-              handleSubmit(e), modifyChatHistory(userId);
-            }}
+            onSubmit={handleFormSubmit}
           >
             <Box sx={{ cursor: "pointer" }}>
               <Dropzone
@@ -562,7 +586,7 @@ const ChatPage = ({ socket, fromNav }) => {
             })
           }
         >
-          <ArrowDownward />
+          {userId && <ArrowDownward />}
         </Box>
       </Box>
       {wrongPassword && <WrongPassword />}

@@ -4,6 +4,7 @@ import {
   deleteComment,
   likeComment,
   editComment,
+  pinComment,
 } from "../controllers/comment.js";
 import { verifyToken } from "../middleware/auth.js";
 
@@ -15,5 +16,6 @@ router.delete("/:commentId", verifyToken, deleteComment);
 
 router.patch("/:commentId/:userId/like", verifyToken, likeComment);
 router.patch("/:commentId/edit", verifyToken, editComment);
+router.patch("/:commentId/pin", verifyToken, pinComment);
 
 export default router;

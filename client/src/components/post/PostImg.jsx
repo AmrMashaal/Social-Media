@@ -5,12 +5,13 @@ const PostImg = ({ setIsPostClicked, setPostClickData, ele }) => {
       src={`${import.meta.env.VITE_API_URL}/assets/${ele.picturePath}`}
       alt="Post Picture"
       style={{
-        maxHeight: "540px",
+        maxHeight: "560px",
         objectFit: "cover",
         margin: "10px 0 10px 0",
         borderRadius: "0.75rem",
         cursor: "pointer",
         backgroundColor: "gray",
+        userSelect: "none",
       }}
       width="100%"
       onClick={() => {

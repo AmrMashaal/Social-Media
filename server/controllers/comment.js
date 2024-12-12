@@ -10,6 +10,7 @@ export const getComments = async (req, res) => {
   try {
     const comments = await Comment.find({ postId: postId })
       .sort({
+        pinned: -1,
         createdAt: -1,
       })
       .limit(limit)
@@ -128,6 +129,26 @@ export const editComment = async (req, res) => {
 
     comment.text = req.body.text;
     comment.edited = true;
+
+    await comment.save();
+
+    res.status(200).json(comment);
+  } catch (err) {
+    res.status(404).json({ message: err.message });
+  }
+};
+
+export const pinComment = async (req, res) => {
+  const { commentId } = req.params;
+ 
+  try {
+    const comment = await Comment.findById(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ message: "comment is not found" });
+    }
+
+    comment.pinned = !comment.pinned;
 
     await comment.save();
 

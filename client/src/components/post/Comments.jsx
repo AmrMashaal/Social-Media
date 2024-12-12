@@ -14,6 +14,8 @@ import {
   FavoriteOutlined,
   ImageOutlined,
   Send,
+  PushPinOutlined,
+  PushPin,
 } from "@mui/icons-material";
 import { useTheme } from "@emotion/react";
 import DOMPurify from "dompurify";
@@ -36,16 +38,21 @@ const Comments = ({ _id, userId }) => {
   const [imageError, setImageError] = useState("");
   const [openPhotoImage, setOpenPhotoImage] = useState("");
   const [likeList, setLikeList] = useState([]);
-  const [pageNumber, setPageNumber] = useState(1);
   const [commentsState, setCommentsState] = useState([]);
+  const [pageNumber, setPageNumber] = useState(1);
   const [CommentUserId, setCommentUserId] = useState(null);
   const [commentId, setCommentId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isPinnedComment, setIsPinnedComment] = useState(false);
   const [commentEditOpen, setCommentEditOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
   const [isImage, setIsImage] = useState(false);
   const [isDeleteComment, setIsDeleteComment] = useState(false);
   const [likesLoading, setLikesLoading] = useState(true);
+  const [commentLikeLoading, setCommentLikeLoading] = useState({
+    loading: true,
+    commentId: null,
+  });
   const [showLikes, setShowLikes] = useState(false);
   const [isOpenPhoto, setIsOpenPhoto] = useState(false);
 
@@ -113,8 +120,6 @@ const Comments = ({ _id, userId }) => {
       } else {
         setCommentsState((prev) => [...prev, ...comments]);
       }
-
-      // dispatch(setPost({ post_id: post._id, post: post }));
     } catch (error) {
       console.log(error);
     } finally {
@@ -188,11 +193,13 @@ const Comments = ({ _id, userId }) => {
   };
 
   const handleLikeComment = async (commentId) => {
+    setCommentLikeLoading({ loading: true, commentId });
+
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/comments/${commentId}/${
+        `${import.meta.env.VITE_API_URL}/likes/${commentId}/${
           user._id
-        }/like`,
+        }/likeComment`,
         {
           method: "PATCH",
           headers: {
@@ -206,11 +213,13 @@ const Comments = ({ _id, userId }) => {
 
       setCommentsState(
         commentsState.map((newCom) =>
-          newCom._id === comment._id ? comment : newCom
+          newCom._id === comment.comment._id ? comment.comment : newCom
         )
       );
     } catch (error) {
       console.log(error);
+    } finally {
+      setCommentLikeLoading({ loading: false, commentId });
     }
   };
 
@@ -266,6 +275,36 @@ const Comments = ({ _id, userId }) => {
       commentsParent.removeEventListener("scroll", scrollFunction);
     };
   }, []);
+
+  const handlePinComment = async (commentId) => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/comments/${commentId}/pin`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const newComment = await response.json();
+
+      if (newComment.pinned) {
+        setCommentsState((prev) => [
+          newComment,
+          ...prev.filter((com) => com._id !== newComment._id),
+        ]);
+      } else {
+        setCommentsState((prev) => [
+          ...prev.filter((com) => com._id !== newComment._id),
+          newComment,
+        ]);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   return (
     <Box position="relative">
@@ -472,11 +511,31 @@ const Comments = ({ _id, userId }) => {
                           {com?.edited && (
                             <Typography
                               fontSize="11px"
-                              fontWeight="300"
+                              fontWeight="500"
                               color={mode === "light" ? "#6a6a6a" : "#b8b8b8"}
                             >
                               | Edited
                             </Typography>
+                          )}
+
+                          {com?.pinned && (
+                            <Box display="flex" alignItems="center" gap="2px">
+                              |{" "}
+                              <Typography
+                                fontSize="11px"
+                                fontWeight="500"
+                                color={mode === "light" ? "#6a6a6a" : "#b8b8b8"}
+                              >
+                                Pinned
+                              </Typography>{" "}
+                              <PushPinOutlined
+                                sx={{
+                                  fontSize: "18px",
+                                  position: "relative",
+                                  top: "1px",
+                                }}
+                              />
+                            </Box>
                           )}
                         </Typography>
                       </Box>
@@ -488,6 +547,7 @@ const Comments = ({ _id, userId }) => {
                               setCommentText(com?.text),
                               setCommentEditOpen(true);
                             setCommentUserId(com?.userId);
+                            setIsPinnedComment(com?.pinned);
                           }}
                         >
                           <MoreHoriz />
@@ -552,8 +612,12 @@ const Comments = ({ _id, userId }) => {
                         onClick={() => {
                           handleLikeComment(com?._id);
                         }}
+                        disabled={
+                          com?._id === commentLikeLoading.commentId &&
+                          commentLikeLoading.loading
+                        }
                       >
-                        {com?.likes?.includes(user._id) ? (
+                        {com?.isLiked ? (
                           <FavoriteOutlined sx={{ color: "red" }} />
                         ) : (
                           <FavoriteBorderOutlined />
@@ -566,7 +630,7 @@ const Comments = ({ _id, userId }) => {
                           setShowLikes(true), whoLikes(com?.likes);
                         }}
                       >
-                        {com?.likes?.length}
+                        {com?.likesCount}
                       </Typography>
                     </Box>
                   </Box>
@@ -716,6 +780,50 @@ const Comments = ({ _id, userId }) => {
                 >
                   <EditOutlined sx={{ fontSize: "25px" }} />
                   <Typography fontSize="16px">Edit The Comment</Typography>
+                </IconButton>
+              )}
+
+              {user._id === userId && (
+                <IconButton
+                  sx={{
+                    borderRadius: "8px",
+                    display: "flex",
+                    gap: "10px",
+                    alignItems: "center",
+                    width: "100%",
+                  }}
+                  onClick={() => {
+                    setCommentEditOpen(false);
+                    handlePinComment(commentId);
+                    setIsPinnedComment();
+                  }}
+                >
+                  {isPinnedComment ? (
+                    <Box position="relative">
+                      <Box
+                        sx={{
+                          width: "35px",
+                          height: "2px",
+                          backgroundColor: "#FF0000",
+                          position: "absolute",
+                          top: "45%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%) rotate(-45deg)",
+                        }}
+                      />
+
+                      <PushPin
+                        sx={{
+                          fontSize: "25px",
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <PushPin sx={{ fontSize: "25px" }} />
+                  )}
+                  <Typography fontSize="16px">
+                    {isPinnedComment ? "Unpin The Comment" : "Pin The Comment"}
+                  </Typography>
                 </IconButton>
               )}
 

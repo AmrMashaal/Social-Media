@@ -18,11 +18,12 @@ import postRoutes from "./routes/posts.js";
 import messageRoutes from "./routes/messages.js";
 import commentRoutes from "./routes/comments.js";
 import searchRoutes from "./routes/search.js";
+import notificationRoutes from "./routes/notifications.js";
 import { editUser } from "./controllers/users.js";
 import { verifyToken } from "./middleware/auth.js";
 import { postCommentOriginal } from "./controllers/comment.js";
 import { sendMessage } from "./controllers/message.js";
-
+import likeRoutes from "./routes/likes.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -47,7 +48,7 @@ const PORT = process.env.PORT || 6001;
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_LINK, 
+    origin: process.env.FRONTEND_LINK,
     methods: ["GET", "POST"],
   },
 });
@@ -55,19 +56,30 @@ const io = new Server(server, {
 const onlineUsers = {};
 
 io.on("connection", (socket) => {
-  socket.on("userOnline", (id) => {
-    onlineUsers[id] = socket.id;
-  });
+  socket.on("userOnline", async (data) => {
+    onlineUsers[data.userId] = socket.id;
 
-  socket.on("disconnect", () => {
-    const userId = Object.keys(onlineUsers).find((key) => {
-      return onlineUsers[key] === socket.id;
-    });
-
-    if (userId) {
-      delete onlineUsers[userId];
+    for (const friend in data.friends) {
+      socket
+        .to(onlineUsers[data.friends[friend]._id])
+        .emit("friendsOnline", data.userId);
     }
+
+    const response = await fetch(
+      `${process.env.FRONTEND_FETCHING_LINK}/users/${data.userId}/onlineState`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          makeOnline: true,
+        }),
+      }
+    );
   });
+
+  // --------------------------------------------------------
 
   socket.on("sendMessage", (data) => {
     socket
@@ -75,8 +87,74 @@ io.on("connection", (socket) => {
       .emit("receiveMessage", data.message);
   });
 
+  // --------------------------------------------------------
+
   socket.on("newPost", async (data) => {
     io.emit("notification", data);
+  });
+
+  // --------------------------------------------------------
+
+  socket.on("notifications", async (data) => {
+    if (data.notification.type !== "newPost") {
+      socket
+        .to(onlineUsers[data.receiverId])
+        .emit("getNotifications", data.notification);
+    }
+    // ------------------------------------------------------
+    else if (data.notification.type === "newPost") {
+      for (const friend in data.friends) {
+        const response = await fetch(
+          `${process.env.FRONTEND_FETCHING_LINK}/notifications/${data._id}/${data.friends[friend]._id}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${data.token}`,
+            },
+
+            body: JSON.stringify({
+              type: "newPost",
+              description: `${data.firstName} shared a new post`,
+              linkId: data.postId,
+              receiverId: data.friends[friend]._id,
+              senderId: data._id,
+            }),
+          }
+        );
+
+        const notification = await response.json();
+
+        socket
+          .to(onlineUsers[data.friends[friend]._id])
+          .emit("friendNewPost", notification);
+      }
+    }
+  });
+
+  // --------------------------------------------------------
+
+  socket.on("disconnect", async () => {
+    const userId = Object.keys(onlineUsers).find((key) => {
+      return onlineUsers[key] === socket.id;
+    });
+
+    if (userId) {
+      delete onlineUsers[userId];
+    }
+
+    await fetch(
+      `${process.env.FRONTEND_FETCHING_LINK}/users/${userId}/onlineState`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          makeOnline: false,
+        }),
+      }
+    );
   });
 });
 
@@ -146,6 +224,8 @@ app.use("/users", userRoutes);
 app.use("/posts", postRoutes);
 app.use("/messages", messageRoutes);
 app.use("/comments", commentRoutes);
+app.use("/notifications", notificationRoutes);
+app.use("/likes", likeRoutes);
 
 const serverConnection = async () => {
   try {
@@ -164,9 +244,6 @@ const serverConnection = async () => {
 
 serverConnection();
 
-// ?.updateMany(
-//   {}, // No filter, so it will affect all documents
-//   { $set: { ?: "" } } // Remove 'comment' field
-// )
-//   .then((result) => console.log("Users updated:", result))
-//   .catch((err) => console.error(err));
+// ?.updateMany({}, { $set: { ?: 0 } })
+// .then((result) => console.log("Users updated:", result))
+// .catch((err) => console.error(err));

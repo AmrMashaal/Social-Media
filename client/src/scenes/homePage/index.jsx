@@ -10,7 +10,7 @@ import { setFriends } from "../../../state";
 import WrongPassword from "../../components/WrongPassword";
 
 // eslint-disable-next-line react/prop-types
-const HomePage = ({ socket, newPosts, setNewPosts }) => {
+const HomePage = ({ socket, newPosts, setNewPosts, onlineFriends, setOnlineFriends }) => {
   const [loading, setLoading] = useState(true);
   const [wrongPassword, setWrongPassword] = useState(false);
 
@@ -76,7 +76,10 @@ const HomePage = ({ socket, newPosts, setNewPosts }) => {
   document.title = "Loop";
 
   return (
-    <Box position="relative" className="homeContainer">
+    <Box
+      position="relative"
+      className="homeContainer"
+    >
       <Box
         position="fixed"
         width="800px"
@@ -119,6 +122,20 @@ const HomePage = ({ socket, newPosts, setNewPosts }) => {
         justifyContent="space-between"
         flexDirection={!isNonMobileScreens ? "column" : ""}
       >
+        {!isNonMobileScreens && (
+          <Box flexBasis="26%">
+            <FriendsWidget
+              handleUserFriend={handleUserFriend}
+              loading={loading}
+              setLoading={setLoading}
+              description="online friends"
+              userId={user._id}
+              onlineFriends={onlineFriends}
+              type="onlineFriends"
+              setOnlineFriends={setOnlineFriends}
+            />
+          </Box>
+        )}
         {isNonMobileScreens && (
           <Box flexBasis={isNonMobileScreens ? "26%" : undefined}>
             <UserWidget userId={_id} picturePath={picturePath} />
@@ -138,7 +155,10 @@ const HomePage = ({ socket, newPosts, setNewPosts }) => {
               handleUserFriend={handleUserFriend}
               loading={loading}
               setLoading={setLoading}
-              description="my friends"
+              description="online friends"
+              type="onlineFriends"
+              setOnlineFriends={setOnlineFriends}
+              onlineFriends={onlineFriends}
               userId={user._id}
             />
           </Box>

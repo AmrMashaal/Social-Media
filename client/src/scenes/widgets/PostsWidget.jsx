@@ -41,7 +41,7 @@ const PostsWidget = ({ socket, newPosts: newPostsData = {} }) => {
     try {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/posts/feed?page=${pageNumber}&limit=${
-          5 + newPostsData.length
+          10 + newPostsData.length
         }`,
         {
           method: "GET",
@@ -51,10 +51,6 @@ const PostsWidget = ({ socket, newPosts: newPostsData = {} }) => {
 
       const newPosts = await response.json();
 
-      // console.log(
-      //   new Date(newPosts[0]?.createdAt) < new Date(newPosts[1]?.createdAt)
-      // );
-
       if (reset) {
         dispatch(setPosts({ posts: uiqueIt(newPosts) }));
       } else if (newPostsData.length === 0) {
@@ -63,7 +59,6 @@ const PostsWidget = ({ socket, newPosts: newPostsData = {} }) => {
         dispatch(
           setPosts({ posts: uiqueIt([...posts, ...newPosts, ...newPostsData]) })
         );
-        // setNewPosts([]);
       }
     } catch (error) {
       console.log(error);

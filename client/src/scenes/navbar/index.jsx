@@ -10,6 +10,7 @@ import {
   FormControl,
   useTheme,
   useMediaQuery,
+  Button,
 } from "@mui/material";
 import {
   Search,
@@ -20,19 +21,28 @@ import {
   People,
   Person2,
   Message,
+  Notifications,
 } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
 import { setMode, setLogout, setFriendsRequest } from "../../../state/index";
 import { Link, useNavigate } from "react-router-dom";
 import FriendsRequest from "../widgets/FriendsRequest";
+import NotificationData from "../widgets/NotificationData";
+import socket from "../../components/socket";
+import { debounce } from "lodash";
 
 // eslint-disable-next-line react/prop-types
 const Navbar = ({ isProfile }) => {
   const [isMobileMenuToggled, setIsMobileMenuToggled] = useState(false);
   const [openRequests, setOpenRequests] = useState(false);
   const [isSearch, setIsSearch] = useState(false);
+  const [isNotification, setIsNotification] = useState(false);
   const [returnNavColor, setReturnNavColor] = useState(true);
   const [friendsRequestData, setFriendRequestData] = useState([]);
+  const [notificationsState, setNotificationsState] = useState(null);
+  const [watchedNotifications, setWatchedNotifications] = useState(null);
+  const [isDeleteNotifications, setIsDeleteNotifications] = useState(false);
+  const [pageNumber, setPageNumber] = useState(1);
   const [searchValue, setSearchValue] = useState("");
 
   const dispatch = useDispatch();
@@ -69,6 +79,79 @@ const Navbar = ({ isProfile }) => {
     }
   };
 
+  const getNotifications = async (initial = false) => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/notifications/${
+          user._id
+        }?page=${pageNumber}&limit=10`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (initial) {
+        setNotificationsState(data);
+      } else {
+        setNotificationsState((prev) => [...prev, ...data]);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleWatchNotification = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/notifications/${user._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        setWatchedNotifications(null);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleDeleteNotifications = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/notifications/${user._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        setNotificationsState(null);
+        setWatchedNotifications(null);
+        setIsDeleteNotifications(false);
+        setIsNotification(false);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const getMoreNotifications = () => {
+    setPageNumber((prev) => prev + 1);
+  };
+
   useEffect(() => {
     friendsRequest();
     const focusSearch = (event) => {
@@ -93,6 +176,7 @@ const Navbar = ({ isProfile }) => {
 
     return () => {
       document.removeEventListener("keypress", focusSearch);
+
       if (isProfile) {
         document.removeEventListener("scroll", navScroll);
       }
@@ -100,8 +184,68 @@ const Navbar = ({ isProfile }) => {
   }, []);
 
   useEffect(() => {
+    socket.on("getNotifications", (data) => {
+      setNotificationsState((prev) =>
+        notificationsState?.length === 0 ? data : [data, ...(prev || [])]
+      );
+    });
+
+    socket.on("friendNewPost", (data) => {
+      setNotificationsState((prev) =>
+        notificationsState?.length === 0 ? data : [data, ...(prev || [])]
+      );
+    });
+
+    return () => {
+      socket.off("getNotifications");
+      socket.off("friendNewPost");
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    setWatchedNotifications(
+      notificationsState?.length > 0
+        ? notificationsState?.filter((ele) => ele.watched === false)
+        : null
+    );
+
+    return () => {
+      setWatchedNotifications(null);
+    };
+  }, [notificationsState]);
+
+  useEffect(() => {
     document.body.style.overflow = isMobileMenuToggled ? "hidden" : "unset";
   }, [isMobileMenuToggled, mode]);
+
+  useEffect(() => {
+    if (pageNumber === 1) {
+      getNotifications(true);
+    } else {
+      getNotifications();
+    }
+  }, [pageNumber]);
+
+  const disconnectSocket = async () => {
+    socket.disconnect();
+   
+    try {
+      await fetch(
+        `${import.meta.env.VITE_API_URL}/users/${user._id}/onlineState`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            makeOnline: false,
+          }),
+        }
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   return (
     <FlexBetween
@@ -267,6 +411,63 @@ const Navbar = ({ isProfile }) => {
             </IconButton>
           </Link>
 
+          <IconButton
+            sx={{
+              position: "relative",
+              bgcolor:
+                isProfile && returnNavColor && mode === "light"
+                  ? "#f0f0f0b3"
+                  : isProfile && returnNavColor && mode === "dark"
+                  ? "#33333391"
+                  : undefined,
+            }}
+            onClick={() => {
+              setIsNotification(true),
+                handleWatchNotification(),
+                setIsDeleteNotifications(false);
+              if (
+                notificationsState !== null &&
+                notificationsState?.length !== 0
+              ) {
+                setNotificationsState(
+                  notificationsState?.map((ele) => {
+                    return { ...ele, watched: true };
+                  })
+                );
+              }
+            }}
+          >
+            <Notifications sx={{ fontSize: "25px" }} />
+            <Typography
+              position="absolute"
+              top="-2px"
+              right="0"
+              p="3px"
+              sx={{
+                width: "17px",
+                borderRadius: "50%",
+                bgcolor:
+                  watchedNotifications?.length !== 0 &&
+                  watchedNotifications !== null
+                    ? "red"
+                    : undefined,
+                height: "17px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "12px",
+                padding: "10px",
+                color: "white",
+              }}
+            >
+              {watchedNotifications?.length > 99
+                ? "+99"
+                : watchedNotifications?.length !== 0
+                ? watchedNotifications?.length
+                : undefined}
+            </Typography>
+          </IconButton>
+
           <Box
             p="3px"
             width="130px"
@@ -370,7 +571,12 @@ const Navbar = ({ isProfile }) => {
               >
                 {fullName}
               </MenuItem>
-              <MenuItem value="Log out" onClick={() => dispatch(setLogout())}>
+              <MenuItem
+                value="Log out"
+                onClick={() => {
+                  dispatch(setLogout()), disconnectSocket();
+                }}
+              >
                 Log out
               </MenuItem>
             </Select>
@@ -553,7 +759,7 @@ const Navbar = ({ isProfile }) => {
                 <IconButton sx={{ position: "relative" }}>
                   <People sx={{ fontSize: "25px" }} />
 
-                  {user.friendsRequest.length > 0 && (
+                  {user?.friendsRequest?.length > 0 && (
                     <Typography
                       position="absolute"
                       right="0px"
@@ -564,13 +770,72 @@ const Navbar = ({ isProfile }) => {
                       fontSize="11px"
                       color="white"
                     >
-                      {user.friendsRequest.length < 100
-                        ? user.friendsRequest.length
+                      {user?.friendsRequest?.length < 100
+                        ? user?.friendsRequest?.length
                         : "+99"}
                     </Typography>
                   )}
                 </IconButton>
                 <Typography>Friends Request</Typography>
+              </Box>
+
+              <Box
+                display="flex"
+                alignItems="center"
+                sx={{ cursor: "pointer", userSelect: "none" }}
+                onClick={() => {
+                  setIsNotification(true),
+                    handleWatchNotification(),
+                    setIsDeleteNotifications(false);
+                  if (
+                    notificationsState !== null &&
+                    notificationsState?.length !== 0
+                  ) {
+                    setNotificationsState(
+                      notificationsState?.map((ele) => {
+                        return { ...ele, watched: true };
+                      })
+                    );
+                  }
+                }}
+              >
+                <IconButton
+                  sx={{
+                    position: "relative",
+                  }}
+                >
+                  <Notifications sx={{ fontSize: "25px" }} />
+                  <Typography
+                    position="absolute"
+                    top="-2px"
+                    right="0"
+                    p="3px"
+                    sx={{
+                      width: "17px",
+                      borderRadius: "50%",
+                      bgcolor:
+                        watchedNotifications?.length !== 0 &&
+                        watchedNotifications !== null
+                          ? "red"
+                          : undefined,
+                      height: "17px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      padding: "10px",
+                      color: "white",
+                    }}
+                  >
+                    {watchedNotifications?.length > 99
+                      ? "+99"
+                      : watchedNotifications?.length !== 0
+                      ? watchedNotifications?.length
+                      : undefined}
+                  </Typography>
+                </IconButton>
+
+                <Typography>Notifications</Typography>
               </Box>
 
               <FormControl variant="standard" value={fullName}>
@@ -603,7 +868,9 @@ const Navbar = ({ isProfile }) => {
                   </MenuItem>
                   <MenuItem
                     value="Log out"
-                    onClick={() => dispatch(setLogout())}
+                    onClick={() => {
+                      dispatch(setLogout()), disconnectSocket();
+                    }}
                   >
                     Log out
                   </MenuItem>
@@ -682,6 +949,93 @@ const Navbar = ({ isProfile }) => {
           friendsRequestData={friendsRequestData}
           setFriendRequestData={setFriendRequestData}
         />
+      )}
+
+      {isNotification && !isDeleteNotifications && (
+        <NotificationData
+          openNotification={isNotification}
+          setIsMobileMenuToggled={setIsMobileMenuToggled}
+          setIsNotification={setIsNotification}
+          notificationsState={notificationsState}
+          isDeleteNotifications={isDeleteNotifications}
+          setIsDeleteNotifications={setIsDeleteNotifications}
+          getMoreNotifications={getMoreNotifications}
+        />
+      )}
+
+      {isDeleteNotifications && (
+        <Box
+          position="fixed"
+          width="100%"
+          height="100%"
+          top="0"
+          left="0"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          zIndex="111"
+        >
+          <Box
+            position="absolute"
+            width="100%"
+            height="100%"
+            bgcolor="#00000066"
+            onClick={() => setIsDeleteNotifications(false)}
+          ></Box>
+
+          <Box
+            bgcolor={theme.palette.neutral.light}
+            p="10px 28px"
+            width={isNonMobileScreens ? "500px" : "100%"}
+            display="flex"
+            flexDirection="column"
+            justifyContent="center"
+            position="relative"
+            height="100px"
+            sx={{
+              maxWidth: "100%",
+              zIndex: "1",
+              overflow: "auto",
+              borderRadius: isNonMobileScreens ? "0.75rem" : "0",
+            }}
+          >
+            <Box
+              display="flex"
+              gap="20px"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Button
+                sx={{
+                  bgcolor: "#9e1125b3",
+                  color: "white",
+                  width: "130px",
+                  ":hover": {
+                    bgcolor: "#760e1d47",
+                  },
+                }}
+                onClick={() => {
+                  setIsDeleteNotifications(false), handleDeleteNotifications();
+                }}
+              >
+                Remove
+              </Button>
+              <Button
+                sx={{
+                  bgcolor: "#57575780",
+                  color: "white",
+                  width: "130px",
+                  ":hover": {
+                    bgcolor: "#44444480",
+                  },
+                }}
+                onClick={() => setIsDeleteNotifications(false)}
+              >
+                Close
+              </Button>
+            </Box>
+          </Box>
+        </Box>
       )}
     </FlexBetween>
   );

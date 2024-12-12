@@ -95,7 +95,6 @@ const UserWidget = ({ userId, picturePath }) => {
                 top="30px"
                 left="50%"
                 borderRadius="50%"
-                border={`3px solid ${palette.background.alt}`}
                 sx={{ transform: "translateX(-50%)", zIndex: "3" }}
               >
                 <UserImage image={picturePath} size="70"></UserImage>

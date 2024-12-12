@@ -2,12 +2,23 @@
 import { Close } from "@mui/icons-material";
 import { Divider, IconButton, Typography } from "@mui/material";
 import { Box, useMediaQuery, useTheme } from "@mui/system";
+import { useEffect } from "react";
 
-const TasksComponent = ({ children, open, setOpen, description }) => {
+const TasksComponent = ({ children, open, setOpen, description, id = "" }) => {
   const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
   const theme = useTheme();
 
-  document.body.style.overflow = open ? "hidden" : "unset";
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [open]);
 
   return (
     <Box
@@ -47,6 +58,7 @@ const TasksComponent = ({ children, open, setOpen, description }) => {
           maxHeight: isNonMobileScreens ? "700px" : "312px",
           overflow: "auto",
         }}
+        id={id}
       >
         <Box
           display="flex"

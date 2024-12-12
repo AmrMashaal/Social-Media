@@ -97,6 +97,10 @@ const WhoLiked = ({ likesLoding, likeList, setShowLikes, setLikeList }) => {
           </Box>
         ) : (
           likeList?.map((user, index) => {
+            if (user._id === undefined) {
+              return;
+            }
+
             return (
               <>
                 <Link to={`/profile/${user._id}`} className="opacityBox">

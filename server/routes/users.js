@@ -9,6 +9,8 @@ import {
   modifyChatHistory,
   changePassword,
   checkCorrectPassword,
+  getOnlineFriends,
+  changeOnlineStatus,
 } from "../controllers/users.js";
 import { verifyToken } from "../middleware/auth.js";
 
@@ -16,6 +18,7 @@ const router = express.Router();
 
 router.get("/:id", verifyToken, getUser);
 router.get("/:id/friends", verifyToken, getUserFriends);
+router.get("/:id/onlineFriends", verifyToken, getOnlineFriends);
 router.get("/:id/chatHistory", verifyToken, getChatHistory);
 
 router.patch("/:id/:friendId", verifyToken, addRemoveFriend);
@@ -25,5 +28,6 @@ router.patch("/:id/:receivedId/chatHistory", verifyToken, modifyChatHistory);
 
 router.post("/:id/password", verifyToken, changePassword);
 router.post("/:id/checkCorrectPassword", verifyToken, checkCorrectPassword);
+router.post("/:id/onlineState", changeOnlineStatus);
 
 export default router;

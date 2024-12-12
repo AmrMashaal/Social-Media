@@ -1,7 +1,7 @@
 import { Box, useMediaQuery } from "@mui/system";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../navbar";
-import Postwidget from "../widgets/PostWidget";
+import PostWidget from "../widgets/PostWidget";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import PostClick from "../../components/post/PostClick";
@@ -13,6 +13,7 @@ import FriendsWidget from "../widgets/FriendsWidget";
 import MyPostWidget from "../widgets/MyPostWidget";
 import PostSkeleton from "../skeleton/PostSkeleton";
 import WrongPassword from "../../components/WrongPassword";
+import socket from "../../components/socket";
 
 const ProfilePage = () => {
   const { userId } = useParams();
@@ -126,7 +127,7 @@ const ProfilePage = () => {
   };
 
   useEffect(() => {
-    if (userInfo) {
+    if (userInfo?.firstName !== undefined) {
       document.title = `Loop - ${userInfo?.firstName} ${userInfo?.lastName}`;
     }
   }, [userInfo]);
@@ -260,12 +261,18 @@ const ProfilePage = () => {
               top={isNonMobileScreens ? "93px" : undefined}
               mt={isNonMobileScreens ? undefined : "10px"}
             >
-              <FriendsWidget userId={userId} description="user friends" />
+              <FriendsWidget
+                type="friends"
+                userId={userId}
+                description={
+                  userId === user._id ? "my friends" : "user friends"
+                }
+              />
             </Box>
 
             <Box width="100%">
               {userId === user._id && (
-                <MyPostWidget picturePath={user.picturePath} />
+                <MyPostWidget picturePath={user.picturePath} socket={socket} />
               )}
 
               <Box mt={isNonMobileScreens ? undefined : "-87px"}>
@@ -274,7 +281,7 @@ const ProfilePage = () => {
                     <PostSkeleton />
                   ) : (
                     <>
-                      <Postwidget
+                      <PostWidget
                         posts={posts}
                         postClickData={postClickData}
                         setPostClickData={setPostClickData}

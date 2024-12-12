@@ -10,19 +10,23 @@ import {
 
 const LikePost = ({
   ele,
-  user,
   setShowLikes,
   handleLike,
   whoLikes,
   setIsPostClicked,
   setPostClickData,
+  loading,
 }) => {
+
   return (
     <FlexBetween>
       <FlexBetween gap="8px">
         <FlexBetween>
-          <IconButton onClick={() => handleLike(ele || {})}>
-            {Object.keys(ele?.likes || {}).includes(user?._id) ? (
+          <IconButton
+            onClick={() => handleLike(ele || [])}
+            disabled={loading.postId === ele._id}
+          >
+            {ele?.isLiked ? (
               <FavoriteOutlined sx={{ color: "red" }} />
             ) : (
               <FavoriteBorderOutlined />
@@ -35,7 +39,7 @@ const LikePost = ({
               whoLikes(ele?.likes);
             }}
           >
-            {Object.keys(ele?.likes || {}).length}
+            {ele?.likesCount}
           </Typography>
         </FlexBetween>
         <FlexBetween
