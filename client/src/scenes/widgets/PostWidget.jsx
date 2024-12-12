@@ -1,43 +1,77 @@
 /* eslint-disable react/prop-types */
-import { IconButton, Typography, Divider } from "@mui/material";
-import FlexBetween from "../../components/FlexBetween";
+import { Divider, IconButton, Typography } from "@mui/material";
 import {
-  ChatBubbleOutlineOutlined,
-  FavoriteBorderOutlined,
-  FavoriteOutlined,
-  PersonAddOutlined,
-  ShareOutlined,
-  DeleteOutlined,
+  VerifiedOutlined,
+  MoreHoriz,
+  FormatQuote,
+  PushPinOutlined,
 } from "@mui/icons-material";
 import { Box, useMediaQuery, useTheme } from "@mui/system";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import FlexBetween from "../../components/FlexBetween";
 import WidgetWrapper from "../../components/WidgetWrapper";
 import UserImage from "../../components/UserImage";
-import { useDispatch, useSelector } from "react-redux";
 import { setPost, setDeletePost } from "../../../state";
+import DeleteComponent from "../../components/post/DeleteComponent";
+import UserDot from "../../components/post/UserDot";
+import LikePost from "../../components/post/LikePost";
+import WhoLiked from "../../components/post/WhoLiked";
+import PostImg from "../../components/post/PostImg";
+import PostEdited from "../../components/post/PostEdited";
+import PostSkeleton from "../skeleton/PostSkeleton";
+import socket from "../../components/socket";
 
 const PostWidget = ({
   posts,
   setPostClickData,
   isPostClicked,
   setIsPostClicked,
+  postLoading,
+  // socket,
 }) => {
   const [showLikes, setShowLikes] = useState(false);
-  const [likeList, setLikeList] = useState([]);
   const [likesLoding, setLikesLoding] = useState(false);
+  const [postWhoDeleted, setPostWhoDeleted] = useState(null);
+  const [isDelete, setIsDelete] = useState(false);
+  const [isDots, setIsDots] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
+  const [clickLikeLoading, setClickLikeLoading] = useState({
+    postId: null,
+    loading: false,
+  });
+  const [postInfo, setPostInfo] = useState({ postId: null, userId: null });
+  const [likeList, setLikeList] = useState([]);
+
   const { palette } = useTheme();
-  const navigate = useNavigate();
-  const token = useSelector((state) => state.token);
   const medium = palette.neutral.medium;
-  document.body.style.overflow =
-    showLikes || isPostClicked ? "hidden" : "unset";
-  const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
+
+  const token = useSelector((state) => state.token);
+  const mode = useSelector((state) => state.mode);
   const user = useSelector((state) => state.user);
+
   const dispatch = useDispatch();
 
+  const location = useLocation();
+
+  const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
+
+  document.body.style.overflow =
+    showLikes || isPostClicked || isDelete || isDots || isEdit
+      ? "hidden"
+      : "unset";
+
+  // const convertTextLink = (text) => {
+  //   const urlPattern = /(https?:\/\/[^\s]+)/g;
+  //   return text.replace(urlPattern, (url) => {
+  //     return `<a href="${url}" target="_blank" style="color: #2f9cd0; font-weight: 500; text-decoration: underline;">${url}</a>`;
+  //   });
+  // };
+
   const howIsText = (text, img) => {
-    if (!img && text.length < 20) return "24px";
+    if (!img && text?.length < 30) return "24px";
     else return "15px";
   };
 
@@ -47,17 +81,165 @@ const PostWidget = ({
     picturePath,
     userPicturePath,
     description,
-    _id
+    _id,
+    userId,
+    verified
   ) => {
-    if (description.length > 180) {
-      return (
-        <Typography
-          mt={picturePath ? "10px" : "14px"}
-          fontSize={howIsText(description, picturePath)}
-        >
-          {description.slice(0, 180)}
+    const handleText =
+      description?.length > 180 ? description.slice(0, 180) : description;
+    // ----------------------------------------------------
+    const regexBold = /^\*.*\*$/;
+    const testBold = regexBold?.test(description);
+    // ----------------------------------------------------
+    const regexUpper = /^@.*@$/;
+    const testUpper = regexUpper?.test(description);
+    // ----------------------------------------------------
+    const regexAll = /^(@\*.*\*@|\*@.*@\*)$/;
+    const testAll = regexAll.test(description);
+    // ----------------------------------------------------
+    const regexPalestine = /#(free_palestine|palestine|فلسطين)\b/i;
+    const testPalestine = regexPalestine.test(description);
+    // ----------------------------------------------------
+    const regexComma = /^".*"$/;
+    const testComma = regexComma.test(description);
+    // ----------------------------------------------------
+    const regexColor =
+      /\((olive|red|blue|orange|coffee|green|palestine|زيتوني|احمر|ازرق|برتقالي|قهوة|اخضر|قهوه|فلسطين)\)$/i;
+    const testColor = regexColor.test(description);
+    // ----------------------------------------------------
+    const regexArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+    const testArabic = regexArabic.test(description);
+
+    const regexTextFunction = () => {
+      if (testBold || testUpper || testComma) {
+        return handleText.slice(1, -1);
+      } else if (testColor && description?.length < 180) {
+        return description?.split(" ").slice(0, -1).join(" ");
+      } else if (description?.length > 180 && testColor) {
+        return handleText.split(" ").slice(0, -1).join(" ");
+      } else {
+        return handleText;
+      }
+    };
+
+    const backgroundFunction = () => {
+      if (testPalestine && !testColor && !testComma) {
+        return `linear-gradient(${
+          mode === "dark"
+            ? "to right, #89003054, #007a3342, #00000000"
+            : "to right, #8900301c, #007a332b, #00000000"
+        })`;
+      } else if (
+        (testColor && description?.split(" ").includes("(olive)")) ||
+        (testColor && description?.split(" ").includes("(زيتوني)"))
+      ) {
+        return "#a1bb58";
+      } else if (
+        (testColor && description?.split(" ").includes("(red)")) ||
+        (testColor && description?.split(" ").includes("(احمر)"))
+      ) {
+        return "#bb5858";
+      } else if (
+        (testColor && description?.split(" ").includes("(blue)")) ||
+        (testColor && description?.split(" ").includes("(ازرق)"))
+      ) {
+        return "#586bbb";
+      } else if (
+        (testColor && description?.split(" ").includes("(orange)")) ||
+        (testColor && description?.split(" ").includes("(برتقالي)"))
+      ) {
+        return "#bb8558";
+      } else if (
+        (testColor && description?.split(" ").includes("(coffee)")) ||
+        (testColor && description?.split(" ").includes("(قهوة)")) ||
+        (testColor && description?.split(" ").includes("(قهوه)"))
+      ) {
+        return "#906649";
+      } else if (
+        (testColor && description?.split(" ").includes("(green)")) ||
+        (testColor && description?.split(" ").includes("(اخضر)"))
+      ) {
+        return "#58bb6b";
+      } else if (
+        (testColor && description?.split(" ").includes("(palestine)")) ||
+        (testColor && description?.split(" ").includes("(فلسطين)"))
+      ) {
+        return `linear-gradient(${
+          mode === "dark"
+            ? "to right, #89003054, #007a3342, #00000000"
+            : "to right, #890000b8, #007a33f2, #000000f0"
+        })`;
+      }
+    };
+
+    const regexPadding = () => {
+      if (testPalestine && !testColor) {
+        return "8px";
+      } else if (testComma) {
+        return "10px";
+      } else if (
+        testColor &&
+        description?.length <= 180 &&
+        isNonMobileScreens
+      ) {
+        return "180px 50px";
+      } else if (testColor && description?.length <= 180) {
+        return "150px 50px";
+      } else if (
+        testColor &&
+        description?.length > 180 &&
+        !isNonMobileScreens
+      ) {
+        return "70px 15px";
+      } else if (testColor && description?.length > 180 && isNonMobileScreens) {
+        return "180px 20px";
+      }
+    };
+
+    const regexBorderRadius = () => {
+      if (testPalestine && !testColor) {
+        return "16px 0 0 0";
+      } else if (testColor) {
+        return "0.75rem";
+      }
+    };
+
+    return (
+      <Typography
+        mt={picturePath ? "10px" : "14px"}
+        sx={{
+          wordBreak: "break-word",
+          fontWeight: testBold || testAll || testComma ? "bold" : undefined,
+          textTransform: testUpper || testAll ? "uppercase" : undefined,
+          background: backgroundFunction(),
+          padding: regexPadding(),
+          borderRadius: regexBorderRadius(),
+          fontSize:
+            (testColor && !picturePath) || (testComma && !picturePath)
+              ? "24px"
+              : howIsText(description, picturePath),
+          textAlign:
+            (testComma && !picturePath) || testColor ? "center" : undefined,
+          color: testColor ? "white" : undefined,
+          lineHeight: testColor ? "33px" : undefined,
+          direction: testArabic && !testComma && !testColor ? "rtl" : "ltr",
+        }}
+        fontSize={howIsText(description, picturePath)}
+      >
+        {testComma && (
+          <FormatQuote sx={{ transform: "rotate(180deg)", mr: "3px" }} />
+        )}
+        {regexTextFunction()}
+        {testComma && description?.length <= 180 && (
+          <FormatQuote sx={{ ml: "3px" }} />
+        )}
+        {description?.length > 180 && (
           <span
-            style={{ fontWeight: "600", cursor: "pointer", userSelect: "none" }}
+            style={{
+              fontWeight: "600",
+              cursor: "pointer",
+              userSelect: "none",
+            }}
             onClick={() => {
               setIsPostClicked(true),
                 setPostClickData({
@@ -67,32 +249,30 @@ const PostWidget = ({
                   userPicturePath,
                   description,
                   _id,
+                  userId,
+                  verified,
                 });
             }}
           >
             ...more
           </span>
-        </Typography>
-      );
-    } else {
-      return (
-        <Typography
-          mt={picturePath ? "10px" : "14px"}
-          fontSize={howIsText(description, picturePath)}
-        >
-          {description}
-        </Typography>
-      );
-    }
+        )}
+        {testComma && (
+          <Divider
+            sx={{ m: "10px auto 0", width: "300px", maxWidth: "100%" }}
+          />
+        )}
+      </Typography>
+    );
   };
 
   const whoLikes = async (likes) => {
     setLikesLoding(true);
     try {
       const usersWhoLiked = await Promise.all(
-        Object.keys(likes).map(async (userId) => {
+        likes.map(async (userId) => {
           const response = await fetch(
-            `http://localhost:3001/users/${userId}`,
+            `${import.meta.env.VITE_API_URL}/users/${userId}`,
             {
               method: "GET",
               headers: { Authorization: `Bearer ${token}` },
@@ -114,151 +294,230 @@ const PostWidget = ({
 
   const handleLike = async (ele) => {
     const postId = ele._id;
+
+    setClickLikeLoading({ postId, loading: true });
+
     try {
-      const response = await fetch(
-        `http://localhost:3001/posts/${postId}/like`,
+      const response1 = await fetch(
+        `${import.meta.env.VITE_API_URL}/likes/${postId}/${user._id}/like`,
         {
           method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const updatedPost = await response1.json();
+
+      if (response1.ok) {
+        dispatch(setPost({ post_id: postId, post: updatedPost.post }));
+      }
+
+      if (ele.userId !== user._id && updatedPost.isLiked) {
+        const response2 = await fetch(
+          `${import.meta.env.VITE_API_URL}/notifications/${user._id}/${
+            ele.userId
+          }`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              type: "like",
+              description: `${user.firstName} liked your post`,
+              linkId: postId,
+              receiverId: ele.userId,
+              senderId: user._id,
+            }),
+          }
+        );
+
+        const notification = await response2.json();
+
+        socket.emit("notifications", {
+          receiverId: ele.userId,
+          notification: notification,
+        });
+      }
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setClickLikeLoading({ postId: null, loading: false });
+    }
+  };
+
+  const handleDeletePost = async () => {
+    try {
+      await fetch(
+        `${import.meta.env.VITE_API_URL}/posts/${postWhoDeleted}/delete`,
+        {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ userId: user._id }),
         }
       );
 
-      const updatedPost = await response.json();
-
-      dispatch(setPost({ post_id: postId, post: updatedPost }));
+      dispatch(setDeletePost({ postId: postWhoDeleted }));
     } catch (error) {
       console.log(error);
     }
   };
 
-  const handleDeletePost = async (ele) => {
-    try {
-      await fetch(`http://localhost:3001/posts/${ele._id}/delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  const handleEditPost = async (e, editText, description) => {
+    e.preventDefault();
+    if (editText !== description && editText) {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/posts/${postInfo.postId}/edit`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ description: editText }),
+          }
+        );
 
-      dispatch(setDeletePost({ postId: ele._id }));
-    } catch (error) {
-      console.log(error);
+        const data = await response.json();
+        dispatch(setPost({ post_id: postInfo.postId, post: data }));
+      } catch (error) {
+        console.log(error);
+      }
+    }
+  };
+
+  const timeAgo = (postDate) => {
+    const timeNow = new Date(); // get the current time
+    const postTime = new Date(postDate);
+    const seconds = Math.floor((timeNow - postTime) / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const months = Math.floor(days / 30);
+    const years = Math.floor(days / 365);
+
+    if (seconds < 60) {
+      return "Just now";
+    } else if (minutes < 60) {
+      return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+    } else if (hours < 24) {
+      return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    } else if (days < 30) {
+      return `${days} day${days > 1 ? "s" : ""} ago`;
+    } else if (months < 12) {
+      return `${months} month${months > 1 ? "s" : ""} ago`;
+    } else if (years >= 1) {
+      return `${years} year${days > 1 ? "s" : ""} ago`;
     }
   };
 
   // eslint-disable-next-line react/prop-types
-  return posts.length > 0 ? (
-    // eslint-disable-next-line react/prop-types
-    posts.map((ele, index) => {
-      return (
-        <WidgetWrapper my="10px" key={index}>
-          <FlexBetween>
-            <FlexBetween gap="10px">
-              <Box
-                onClick={() => navigate(`/users/${ele.userId}`)}
-                sx={{ cursor: "pointer" }}
-              >
-                <UserImage image={ele.userPicturePath} size="40px" />
-              </Box>
-              <Box>
-                <Typography
-                  sx={{ cursor: "pointer" }}
-                  fontSize="14x"
-                  onClick={() => navigate(`/users/${ele.userId}`)}
-                >
-                  {ele.firstName} {ele.lastName}
-                </Typography>
-                <Typography>
-                  <Typography fontSize="14x" color={medium}>
-                    {ele.createdAt.split("T")[0]}
-                  </Typography>
-                </Typography>
-              </Box>
-            </FlexBetween>
-            {user._id === ele.userId ? (
-              <IconButton onClick={() => handleDeletePost(ele)}>
-                <DeleteOutlined />
-              </IconButton>
-            ) : (
-              <IconButton>
-                <PersonAddOutlined />
-              </IconButton>
-            )}
-          </FlexBetween>
-
-          {isMore(
-            ele.firstName,
-            ele.lastName,
-            ele.picturePath,
-            ele.userPicturePath,
-            ele.description,
-            ele._id
-          )}
-
-          {ele.picturePath && (
-            <img
-              src={`http://localhost:3001/assets/${ele.picturePath}`}
-              alt="Post Picture"
-              style={{
-                maxHeight: "600px",
-                objectFit: "cover",
-                margin: "10px 0 10px 0",
-                borderRadius: "0.75rem",
-                cursor: "pointer",
-              }}
-              width="100%"
-              onClick={() => {
-                setIsPostClicked(true),
-                  setPostClickData({
-                    firstName: ele.firstName,
-                    lastName: ele.lastName,
-                    picturePath: ele.picturePath,
-                    userPicturePath: ele.userPicturePath,
-                    description: ele.description,
-                    _id: ele._id,
-                  });
-              }}
-            />
-          )}
-
-          <FlexBetween>
-            <FlexBetween gap="8px">
-              <FlexBetween>
-                <IconButton onClick={() => handleLike(ele)}>
-                  {Object.keys(ele.likes).includes(user._id) ? (
-                    <FavoriteOutlined />
-                  ) : (
-                    <FavoriteBorderOutlined />
+  return (
+    <>
+      {!postLoading ? (
+        <>
+          {posts?.map((ele, index) => {
+            return (
+              <WidgetWrapper mb="10px" key={index}>
+                <FlexBetween>
+                  <Link to={`/profile/${ele.userId}`}>
+                    <FlexBetween gap="10px">
+                      <Box sx={{ cursor: "pointer" }}>
+                        <UserImage image={ele.userPicturePath} size="40px" />
+                      </Box>
+                      <Box>
+                        <Box
+                          sx={{ cursor: "pointer" }}
+                          display="flex"
+                          alignItems="center"
+                          gap="4px"
+                        >
+                          <Typography fontSize="14px" className="opacityBox">
+                            {ele?.firstName} {ele?.lastName}
+                          </Typography>
+                          {ele?.verified && (
+                            <VerifiedOutlined sx={{ color: "#15a1ed" }} />
+                          )}
+                        </Box>
+                        <Typography
+                          fontSize="11px"
+                          color={medium}
+                          display="flex"
+                          gap="3px"
+                          sx={{ userSelect: "none" }}
+                        >
+                          {timeAgo(ele?.createdAt)}{" "}
+                          {ele?.edited && (
+                            <Typography fontWeight="500" fontSize="11px">
+                              | Edited
+                            </Typography>
+                          )}
+                          {ele?.pinned &&
+                            location.pathname.split("/")[1] === "profile" && (
+                              <Box
+                                display="flex"
+                                alignItems="center"
+                                gap="2px"
+                                fontWeight="500"
+                                fontSize="11px"
+                              >
+                                | Pinned
+                                <PushPinOutlined sx={{ fontSize: "14px" }} />
+                              </Box>
+                            )}
+                        </Typography>
+                      </Box>
+                    </FlexBetween>
+                  </Link>
+                  {ele.userId === user._id && (
+                    <IconButton
+                      onClick={() => {
+                        setIsDots(true),
+                          setPostInfo({ postId: ele._id, userId: ele.userId });
+                      }}
+                    >
+                      <MoreHoriz />
+                    </IconButton>
                   )}
-                </IconButton>
-                <Typography
-                  sx={{ cursor: "pointer" }}
-                  onClick={() => {
-                    setShowLikes(true);
-                    whoLikes(ele.likes);
-                  }}
-                >
-                  {Object.keys(ele.likes).length}
-                </Typography>
-              </FlexBetween>
-              <FlexBetween>
-                <IconButton>
-                  <ChatBubbleOutlineOutlined />
-                </IconButton>
-                {ele.comments.length}
-              </FlexBetween>
-            </FlexBetween>
-            <IconButton>
-              <ShareOutlined />
-            </IconButton>
-          </FlexBetween>
+                </FlexBetween>
 
-          {showLikes && (
+                {isMore(
+                  ele.firstName,
+                  ele.lastName,
+                  ele.picturePath,
+                  ele.userPicturePath,
+                  ele.description,
+                  ele._id
+                )}
+
+                {ele.picturePath && (
+                  <PostImg
+                    setIsPostClicked={setIsPostClicked}
+                    setPostClickData={setPostClickData}
+                    ele={ele}
+                  />
+                )}
+
+                <LikePost
+                  ele={ele}
+                  user={user}
+                  setShowLikes={setShowLikes}
+                  handleLike={handleLike}
+                  whoLikes={whoLikes}
+                  setIsPostClicked={setIsPostClicked}
+                  setPostClickData={setPostClickData}
+                  loading={clickLikeLoading}
+                />
+              </WidgetWrapper>
+            );
+          })}
+          {isDots && (
             <Box
               position="fixed"
               width="100%"
@@ -268,92 +527,83 @@ const PostWidget = ({
               display="flex"
               alignItems="center"
               justifyContent="center"
+              zIndex="111"
             >
               <Box
                 position="absolute"
                 width="100%"
                 height="100%"
                 onClick={() => {
-                  setShowLikes(false);
-                  setLikeList([]);
+                  setIsDots(false);
                 }}
-                bgcolor="#00000012"
+                bgcolor="#00000066"
               ></Box>
               <Box
                 bgcolor={palette.neutral.light}
                 p="10px 28px"
-                width={isNonMobileScreens ? "500px" : "90%"}
+                width={isNonMobileScreens ? "500px" : "100%"}
                 display="flex"
-                flexDirection="column"
+                alignItems="center"
                 gap="14px"
-                minHeight="300px"
+                minHeight="100px"
                 position="relative"
                 sx={{
                   maxWidth: "100%",
                   zIndex: "1",
                   maxHeight: isNonMobileScreens ? "700px" : "312px",
                   overflow: "auto",
+                  borderRadius: isNonMobileScreens ? "0.75rem" : "0",
                 }}
               >
-                {likesLoding ? (
-                  <Box
-                    display="flex"
-                    justifyContent="center"
-                    alignItems="center"
-                    width="100%"
-                    height="100%"
-                    position="absolute"
-                    top="50%"
-                    left="50%"
-                    sx={{ transform: "translate(-50%,-50%)" }}
-                  >
-                    <Typography fontSize="25px">Loding...</Typography>
-                  </Box>
-                ) : likeList.length < 1 ? (
-                  <Box
-                    display="flex"
-                    justifyContent="center"
-                    alignItems="center"
-                    width="100%"
-                    height="100%"
-                    position="absolute"
-                    top="50%"
-                    left="50%"
-                    sx={{ transform: "translate(-50%,-50%)" }}
-                  >
-                    <Typography fontSize="25px">
-                      There are no likes yet
-                    </Typography>
-                  </Box>
-                ) : (
-                  likeList?.map((user, index) => {
-                    return (
-                      <>
-                        <FlexBetween
-                          key={index}
-                          sx={{ cursor: "pointer" }}
-                          onClick={() => navigate(`/users/${user._id}`)}
-                        >
-                          <Box display="flex" alignItems="center" gap="10px">
-                            <UserImage image={user.picturePath} />
-                            <Typography>
-                              {user.firstName || "Undefined"} {user.lastName}
-                            </Typography>
-                          </Box>
-                        </FlexBetween>
-                        <Divider />
-                      </>
-                    );
-                  })
-                )}
+                <UserDot
+                  setPostWhoDeleted={setPostWhoDeleted}
+                  postInfo={postInfo}
+                  setIsDelete={setIsDelete}
+                  setIsDots={setIsDots}
+                  setIsEdit={setIsEdit}
+                />
               </Box>
             </Box>
           )}
-        </WidgetWrapper>
-      );
-    })
-  ) : (
-    <Typography>No posts available</Typography>
+          {isEdit && (
+            <PostEdited
+              setIsEdit={setIsEdit}
+              image={
+                posts.filter((post) => post._id === postInfo.postId)[0]
+                  ?.picturePath
+                  ? `${import.meta.env.VITE_API_URL}/assets/${
+                      posts.filter((post) => post._id === postInfo.postId)[0]
+                        ?.picturePath
+                    }`
+                  : null
+              }
+              description={
+                posts.filter((post) => post._id === postInfo.postId)[0]
+                  ?.description
+              }
+              handleEditPost={handleEditPost}
+            />
+          )}
+          {showLikes && (
+            <WhoLiked
+              likesLoding={likesLoding}
+              likeList={likeList}
+              setShowLikes={setShowLikes}
+              setLikeList={setLikeList}
+            />
+          )}
+          {isDelete && (
+            <DeleteComponent
+              setIsDelete={setIsDelete}
+              handleDeletePost={handleDeletePost}
+              type="post"
+            />
+          )}
+        </>
+      ) : (
+        <PostSkeleton />
+      )}
+    </>
   );
 };
 

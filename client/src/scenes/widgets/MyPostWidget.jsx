@@ -1,11 +1,8 @@
+/* eslint-disable react/prop-types */
 import {
   EditOutlined,
   DeleteOutlined,
-  AttachFileOutlined,
-  GifBoxOutlined,
   ImageOutlined,
-  MicOutlined,
-  MoreHorizOutlined,
 } from "@mui/icons-material";
 import {
   Box,
@@ -14,82 +11,123 @@ import {
   useTheme,
   Button,
   IconButton,
-  useMediaQuery,
   Divider,
 } from "@mui/material";
 import Dropzone from "react-dropzone";
 import UserImage from "../../components/UserImage";
 import WidgetWrapper from "../../components/WidgetWrapper";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { setPosts } from "../../../state";
 import FlexBetween from "../../components/FlexBetween";
+import { Link } from "react-router-dom";
+// import { badWords } from "../../../infoArrays";
 
-const PostWidget = ({ picturePath }) => {
+const MyPostWidget = ({ picturePath, socket }) => {
   const dispatch = useDispatch();
   const [isImage, setIsImage] = useState(false);
   const [image, setImage] = useState(null);
   const [imageError, setImageError] = useState(null);
   const [post, setPost] = useState("");
+  const [isError, setIsError] = useState(false);
+
   const { _id } = useSelector((state) => state.user);
   const token = useSelector((state) => state.token);
+  const posts = useSelector((state) => state.posts);
+  const user = useSelector((state) => state.user);
+
   const { palette } = useTheme();
-  const isNonMobileScreen = useMediaQuery("(min-width: 1000px)");
-  const mediumMain = palette.neutral.mediumMin;
-  const medium = palette.neutral.medium;
 
   const handlePost = async (e) => {
     e.preventDefault();
-    if (post || image) {
+    if (
+      post ||
+      image
+      /* !post.split(" ").some((word) => badWords.includes(word)) */
+    ) {
       const formData = new FormData();
       formData.append("userId", _id);
       formData.append("description", post);
+      setIsError(false);
+
       if (image) {
         formData.append("picture", image);
         formData.append("picturePath", image.name);
       }
 
       try {
-        const response = await fetch("http://localhost:3001/posts", {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/posts`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
 
-        const posts = await response.json();
+        const post = await response.json();
+
         setPost("");
         setImage(null);
-        dispatch(setPosts({ posts }));
-        console.log(posts);
+        setIsImage(false);
+
+        dispatch(setPosts({ posts: [post, ...posts] }));
+
+        socket.emit("newPost", post);
+
+        socket.emit("notifications", {
+          notification: {
+            type: "newPost",
+          },
+          friends: user.friends,
+          _id: user._id,
+          token: token,
+          firstName: user.firstName,
+          postId: post._id,
+        });
       } catch (err) {
         console.log(`Error: ${err}`);
       }
     } else {
+      setIsError(true);
       console.log("You Have to write or upload an image");
     }
   };
 
+  useEffect(() => {
+    isError && post.length !== 0 && setIsError(false);
+  }, [post]);
+
   return (
-    <WidgetWrapper>
+    <WidgetWrapper mb="10px">
       <Box display="flex" alignItems="center" gap="20px">
-        <UserImage image={picturePath} />
+        <Link to={`/profile/${_id}`}>
+          <Box sx={{ cursor: "pointer" }}>
+            <UserImage image={picturePath} />
+          </Box>
+        </Link>
         <Box width="100%">
           <form onSubmit={(e) => handlePost(e)}>
             <InputBase
               type="text"
               fullWidth
-              placeholder="What is on your mind?"
-              value={post}
-              onChange={(e) => setPost(e.target.value)}
               sx={{
                 bgcolor: palette.neutral.light,
                 borderRadius: "50px",
                 p: "10px 10px 10px 18px",
               }}
+              placeholder="What is on your mind?"
+              value={post}
+              onClick={() => isError && setIsError(false)}
+              onChange={(e) => setPost(e.target.value)}
             />
           </form>
+
+          <FlexBetween></FlexBetween>
         </Box>
       </Box>
+      {isError && (
+        <Typography color="error" mt="8px" ml="20px">
+          You have to write or share a photo
+        </Typography>
+      )}
       {isImage && (
         <Box
           border={`2px solid ${palette.neutral.medium}`}
@@ -102,15 +140,17 @@ const PostWidget = ({ picturePath }) => {
           }}
         >
           <Dropzone
-            accept=".jpg,.jpeg,.png"
+            accept=".jpg,.jpeg,.png,.webp"
             multiple={false}
             onDrop={(acceptedFiles) => {
               const file = acceptedFiles[0];
               const fileExtension = file.name.split(".").pop().toLowerCase();
-              if (["jpg", "jpeg", "png"].includes(fileExtension)) {
+              if (["jpg", "jpeg", "png", "webp"].includes(fileExtension)) {
                 setImage(file);
                 setImageError(null);
-              } else if (!["jpg", "jpeg", "png"].includes(fileExtension)) {
+              } else if (
+                !["jpg", "jpeg", "png", "webp"].includes(fileExtension)
+              ) {
                 setImageError("This file is not supported");
               }
             }}
@@ -153,11 +193,13 @@ const PostWidget = ({ picturePath }) => {
           </Dropzone>
         </Box>
       )}
+
       {imageError && isImage && (
         <Box color="red" mt="8px">
           {imageError}
         </Box>
       )}
+
       <Divider sx={{ mt: "10px" }} />
       <FlexBetween mt="10px">
         <FlexBetween
@@ -172,17 +214,20 @@ const PostWidget = ({ picturePath }) => {
               bgcolor: "#54545433",
             },
           }}
-          onClick={() => setIsImage(!isImage)}
+          onClick={() => {
+            setIsImage(!isImage);
+            isError && setIsError(false);
+          }}
         >
           <ImageOutlined />
           <Typography>Image</Typography>
         </FlexBetween>
         <Button onClick={handlePost} type="submit">
-          Submit
+          Share
         </Button>
       </FlexBetween>
     </WidgetWrapper>
   );
 };
 
-export default PostWidget;
+export default MyPostWidget;

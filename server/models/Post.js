@@ -4,13 +4,15 @@ const postSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true },
     firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
+    lastName: String,
+    verified: { type: Boolean, defualt: false },
+    edited: { type: Boolean, default: false },
+    pinned: { type: Boolean, default: false },
+    likesCount: { type: Number, default: 0 },
     location: String,
     description: String,
     userPicturePath: String,
     picturePath: String,
-    likes: { type: Map, of: Boolean },
-    comments: { type: Array, default: [] },
   },
   { timestamps: true }
 );
